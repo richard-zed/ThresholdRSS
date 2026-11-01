@@ -23,8 +23,8 @@ fi
 # JUnit then reports a green suite for code that never built.
 rm -rf out
 
-kotlinc "$CORE"/{Model,Identity,Merge,DayBuckets,Discover,Fetch,Discoverer,YoutubeChannel,FeedParse,Dates}.kt \
-        "$TEST"/{MergeTest,DiscoverTest,SniffTest,SuffixRuleTest,DiscoverPlanTest,DiscovererTest,YoutubeChannelTest,FeedParseTest,DatesTest}.kt \
+kotlinc "$CORE"/{Model,Identity,Merge,DayBuckets,Discover,Fetch,Discoverer,YoutubeChannel,FeedParse,Dates,Json,Store,Opml,HttpFetcher}.kt \
+        "$TEST"/{MergeTest,DiscoverTest,SniffTest,SuffixRuleTest,DiscoverPlanTest,DiscovererTest,YoutubeChannelTest,FeedParseTest,DatesTest,StoreTest,JsonTest,OpmlTest}.kt \
         -classpath "$CP_JUNIT:$CP_CORO" \
         -d out
 
@@ -38,4 +38,7 @@ java -cp "out:$CP_JUNIT:$CP_CORO:$STDLIB" org.junit.runner.JUnitCore \
      dev.daisy.core.YoutubeChannelTest \
      dev.daisy.core.YoutubeCandidateTest \
      dev.daisy.core.FeedParseTest \
-     dev.daisy.core.DatesTest
+     dev.daisy.core.DatesTest \
+     dev.daisy.core.StoreTest \
+     dev.daisy.core.JsonTest \
+     dev.daisy.core.OpmlTest

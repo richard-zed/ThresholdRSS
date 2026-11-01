@@ -1,0 +1,46 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Builds and runs the command line front end. Separate from build.sh because it
+# produces a jar rather than a test run, and the two fail for different reasons.
+#
+#   ./cli.sh discover https://www.youtube.com/@someone
+#
+# The jar is daisy.jar in this directory; args pass straight through.
+set -e
+
+CORE=app/src/main/java/dev/daisy/core
+CLI=app/src/main/java/dev/daisy/cli
+LIB=lib
+
+CP_CORO="$LIB/kotlinx-coroutines-core-jvm-1.9.0.jar"
+# $PREFIX is set in Termux; fall back to wherever kotlinc put it elsewhere.
+if [ -n "$PREFIX" ]; then
+    STDLIB=$(find "$PREFIX" -name 'kotlin-stdlib.jar' | head -1)
+else
+    STDLIB=$(find "$(dirname "$(readlink -f "$(command -v kotlinc)")")/.." -name 'kotlin-stdlib.jar' | head -1)
+fi
+
+if [ -z "$STDLIB" ]; then
+    echo "could not locate kotlin-stdlib.jar; set PREFIX or add it to lib/"
+    exit 1
+fi
+
+if [ ! -f "$CP_CORO" ]; then
+    echo "missing $CP_CORO -- run ./build.sh once to fetch it"
+    exit 1
+fi
+
+# Everything except the Android-only pieces. OkHttpFetcher needs OkHttp, which
+# is an Android dependency; HttpFetcher is the JDK one the CLI uses instead.
+rm -rf out-cli
+kotlinc \
+    "$CORE"/{Model,Identity,Merge,DayBuckets,Discover,Fetch,Discoverer,YoutubeChannel,FeedParse,Dates,Json,Store,Opml,HttpFetcher}.kt \
+    "$CLI"/Main.kt \
+    -classpath "$CP_CORO" \
+    -d out-cli
+
+printf 'Main-Class: dev.daisy.cli.Main\n' > /tmp/manifest.txt
+jar cfm daisy.jar /tmp/manifest.txt -C out-cli .
+
+# The CLI needs the coroutines jar and the stdlib at runtime; a fat jar would be
+# tidier but would need the Android build to agree on its contents.
+exec java -cp "daisy.jar:$CP_CORO:$STDLIB" dev.daisy.cli.Main "$@"
