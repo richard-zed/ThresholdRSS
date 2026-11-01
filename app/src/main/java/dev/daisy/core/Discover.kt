@@ -136,13 +136,6 @@ object UrlCandidates {
             noTrailing.contains("reddit.com/r/") && !noTrailing.contains(".rss") ->
                 listOf("$noTrailing/.rss", "$noTrailing.rss")
 
-            // Mastodon and friends: /@user.rss on most instances. Lemmy, kbin
-            // and Mbin also serve /<community>.rss, which is the same shape --
-            // a bare community path with no /@ to key on, so it is handled by
-            // the generic ".rss append" case below.
-            noTrailing.contains("/@") && !noTrailing.endsWith(".rss") ->
-                listOf("$noTrailing.rss")
-
             // GitHub: user activity and repo feeds are Atom, not RSS.
             // github.com/<user>.atom, and a repo page adds releases/commits.
             hostOf(noTrailing) == "github.com" && !noTrailing.endsWith(".atom") ->
@@ -164,6 +157,18 @@ object UrlCandidates {
             // are not a suffix rule.
             noTrailing == "news.ycombinator.com" || noTrailing == "https://news.ycombinator.com" ->
                 listOf("https://news.ycombinator.com/rss")
+
+            // Mastodon and friends: /@user.rss. This is a SHAPE rule, not a host
+            // rule -- fediverse instances do not share a domain, so there is no
+            // host to match on. It therefore goes LAST, after every rule that
+            // knows its own host: a Medium profile is also /@name, and this
+            // branch used to claim it and produce medium.com/@someone.rss.
+            //
+            // Being last means a host with a more specific rule wins, and only
+            // an @-shaped path nobody claimed falls through to here. The cost of
+            // being wrong is one request.
+            noTrailing.contains("/@") && !noTrailing.endsWith(".rss") ->
+                listOf("$noTrailing.rss")
 
             else -> emptyList()
         }

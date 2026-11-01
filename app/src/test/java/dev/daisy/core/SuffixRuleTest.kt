@@ -36,6 +36,47 @@ class SuffixRuleTest {
         assertEquals(listOf("https://github.com/someone.atom"), suffixUrls("https://github.com/someone/"))
     }
 
+    // --- rule precedence -----------------------------------------------------
+
+    @Test
+    fun `the at-shaped rule does not claim a url whose host has its own rule`() {
+        // Regression: medium.com is also /@name, and the generic @-shape branch
+        // used to sit ahead of it and hand back medium.com/@someone.rss. The
+        // shape rule is a fallback for fediverse instances, which have no shared
+        // domain, so a host-specific rule must always win.
+        assertEquals(
+            listOf("https://medium.com/@someone/feed"),
+            suffixUrls("https://medium.com/@someone"),
+        )
+    }
+
+    @Test
+    fun `an at-shaped path on an unknown host still gets the rss suffix`() {
+        // The other half of the same rule: nothing claims mastodon.social, so
+        // the shape branch must still fire for it.
+        assertEquals(
+            listOf("https://mastodon.social/@someone.rss"),
+            suffixUrls("https://mastodon.social/@someone"),
+        )
+    }
+
+    @Test
+    fun `no two host rules can both claim the same url`() {
+        // Every host-specific prefix here must be mutually exclusive. If a new
+        // rule is added whose host also matches an earlier one, the earlier one
+        // silently wins and this catches it only if the hosts overlap -- so the
+        // real protection is that each branch names a distinct host.
+        val hosts = listOf(
+            "https://github.com/someone",
+            "https://medium.com/@someone",
+            "https://someone.tumblr.com",
+            "https://news.ycombinator.com",
+        )
+        val results = hosts.map { suffixUrls(it) }
+        assertEquals(4, results.count { it.isNotEmpty() })
+        assertEquals(4, results.flatten().distinct().size)
+    }
+
     // --- medium --------------------------------------------------------------
 
     @Test
