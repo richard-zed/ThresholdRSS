@@ -11,7 +11,7 @@ class YoutubeChannelTest {
     // --- forms that already carry an id ----------------------------------------
 
     @Test
-    fun a channel url yields its feed without any resolution() {
+    fun `a channel url yields its feed without any resolution`() {
         val id = YoutubeChannel.idFromChannelPath("https://www.youtube.com/channel/UCabc123XYZ")
         assertEquals("UCabc123XYZ", id)
         assertEquals(
@@ -21,12 +21,12 @@ class YoutubeChannelTest {
     }
 
     @Test
-    fun a channel url is not sent to resolution() {
+    fun `a channel url is not sent to resolution`() {
         assertFalse(YoutubeChannel.needsResolution("https://www.youtube.com/channel/UCabc123XYZ"))
     }
 
     @Test
-    fun a trailing path after the id is ignored() {
+    fun `a trailing path after the id is ignored`() {
         assertEquals(
             "UCabc123XYZ",
             YoutubeChannel.idFromChannelPath("https://www.youtube.com/channel/UCabc123XYZ/videos"),
@@ -34,7 +34,7 @@ class YoutubeChannelTest {
     }
 
     @Test
-    fun a channel segment with no id is not an id() {
+    fun `a channel segment with no id is not an id`() {
         // "channel" with nothing after it, and a short non-UC value.
         assertNull(YoutubeChannel.idFromChannelPath("https://www.youtube.com/channel/"))
         assertNull(YoutubeChannel.idFromChannelPath("https://www.youtube.com/channel/short"))
@@ -45,14 +45,14 @@ class YoutubeChannelTest {
     // --- forms that need a page fetch -----------------------------------------
 
     @Test
-    fun handle c and user forms all need resolution() {
+    fun `handle, c and user forms all need resolution`() {
         assertTrue(YoutubeChannel.needsResolution("https://www.youtube.com/@someone"))
         assertTrue(YoutubeChannel.needsResolution("https://www.youtube.com/c/SomeName"))
         assertTrue(YoutubeChannel.needsResolution("https://www.youtube.com/user/olduser"))
     }
 
     @Test
-    fun a video url is not a channel() {
+    fun `a video url is not a channel`() {
         // The important negative: a watch link must not trigger a page fetch,
         // or every pasted video costs a wasted request.
         assertFalse(YoutubeChannel.needsResolution("https://www.youtube.com/watch?v=abc123"))
@@ -60,7 +60,7 @@ class YoutubeChannelTest {
     }
 
     @Test
-    fun youtu be is treated as youtube() {
+    fun `youtube be is treated as youtube`() {
         // hostOf folds the short domain, so classification agrees.
         assertTrue(YoutubeChannel.needsResolution("https://youtu.be/@someone"))
     }
@@ -68,7 +68,7 @@ class YoutubeChannelTest {
     // --- extraction from a fetched page ---------------------------------------
 
     @Test
-    fun the canonical link is read first() {
+    fun `the canonical link is read first`() {
         val page = """
             <html><head>
             <link rel="canonical" href="https://www.youtube.com/channel/UCcanonicalId">
@@ -79,7 +79,7 @@ class YoutubeChannelTest {
     }
 
     @Test
-    fun the embedded json blob is the fallback() {
+    fun `the embedded json blob is the fallback`() {
         // No canonical tag, but the data blob is there. Quoting is the trap:
         // the key sits inside a JSON string with escaped quotes around it.
         val page = """<html><body><script>var ytInitialData = {"metadata":{"channelMetadataRenderer":{"externalId":"UCblobId","title":"x"}}};</script></body></html>"""
@@ -87,13 +87,13 @@ class YoutubeChannelTest {
     }
 
     @Test
-    fun the itemprop meta is the last resort() {
+    fun `the itemprop meta is the last resort`() {
         val page = """<html><head><meta itemprop="channelId" content="UCmetaId"></head></html>"""
         assertEquals("UCmetaId", YoutubeChannel.idFromPage(page))
     }
 
     @Test
-    fun a page with no id reports null rather than guessing() {
+    fun `a page with no id reports null rather than guessing`() {
         // Consent walls and 404s both land here. Returning a guess would
         // subscribe the user to the wrong channel.
         assertNull(YoutubeChannel.idFromPage("<html><body>Before you continue</body></html>"))
@@ -101,19 +101,19 @@ class YoutubeChannelTest {
     }
 
     @Test
-    fun a malformed id in the page is rejected() {
+    fun `a malformed id in the page is rejected`() {
         val page = """<meta itemprop="channelId" content="not-a-channel-id">"""
         assertNull(YoutubeChannel.idFromPage(page))
     }
 
     @Test
-    fun attribute order does not matter() {
+    fun `attribute order does not matter`() {
         val page = """<link href="https://www.youtube.com/channel/UCswapped" rel="canonical">"""
         assertEquals("UCswapped", YoutubeChannel.idFromPage(page))
     }
 
     @Test
-    fun single and double quotes are both accepted() {
+    fun `single and double quotes are both accepted`() {
         val dq = """<link rel="canonical" href="https://www.youtube.com/channel/UCdq">"""
         val sq = """<link rel='canonical' href='https://www.youtube.com/channel/UCsq'>"""
         assertEquals("UCdq", YoutubeChannel.idFromPage(dq))
@@ -124,7 +124,7 @@ class YoutubeChannelTest {
 class YoutubeCandidateTest {
 
     @Test
-    fun a handle produces the page and no guessed paths() {
+    fun `a handle produces the page and no guessed paths`() {
         val c = UrlCandidates.forInput("https://www.youtube.com/@someone")
         val kinds = c.map { it.kind }
 
@@ -138,7 +138,7 @@ class YoutubeCandidateTest {
     }
 
     @Test
-    fun a direct channel id produces the feed url() {
+    fun `a direct channel id produces the feed url`() {
         val c = UrlCandidates.forInput("https://www.youtube.com/channel/UCdirect")
         assertEquals(
             "https://www.youtube.com/feeds/videos.xml?channel_id=UCdirect",
@@ -147,7 +147,7 @@ class YoutubeCandidateTest {
     }
 
     @Test
-    fun an ordinary site still guesses conventional paths() {
+    fun `an ordinary site still guesses conventional paths`() {
         // The exclusion must be youtube-only; this is the case that would
         // silently break every other site if the condition were inverted.
         val c = UrlCandidates.forInput("https://example.com/blog")

@@ -209,7 +209,7 @@ class DiscovererTest {
     // --- youtube --------------------------------------------------------------
 
     @Test
-    fun a direct channel id goes straight to the feed() {
+    fun `a direct channel id goes straight to the feed`() {
         val feed = "https://www.youtube.com/feeds/videos.xml?channel_id=UCdirect"
         val f = FakeFetcher(mapOf(feed to FetchResult.Ok(feed, "application/atom+xml", rss("Chan"), 200)))
         val (result, _) = run(f, "https://www.youtube.com/channel/UCdirect")
@@ -221,7 +221,7 @@ class DiscovererTest {
     }
 
     @Test
-    fun a handle costs one page fetch then the feed() {
+    fun `a handle costs one page fetch then the feed`() {
         val page = "https://www.youtube.com/@someone"
         val feed = "https://www.youtube.com/feeds/videos.xml?channel_id=UChandle"
         val body = """<link rel="canonical" href="https://www.youtube.com/channel/UChandle">"""
@@ -237,7 +237,7 @@ class DiscovererTest {
     }
 
     @Test
-    fun a handle that redirects to a channel url needs no body parse() {
+    fun `a handle that redirects to a channel url needs no body parse`() {
         // The final url already carries the id, so the feed is promoted from
         // the resolved url alone. Body here has no id at all, which is the
         // point: if resolution depended on the body this test would fail.
@@ -255,7 +255,7 @@ class DiscovererTest {
     }
 
     @Test
-    fun a youtube page with no id does not invent a feed() {
+    fun `a youtube page with no id does not invent a feed`() {
         val page = "https://www.youtube.com/@nobody"
         val f = FakeFetcher(mapOf(
             page to FetchResult.Ok(page, "text/html", "<html>Before you continue</html>", 200),

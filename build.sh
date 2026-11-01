@@ -18,7 +18,6 @@ if [ ! -f "$LIB/kotlinx-coroutines-core-jvm-1.9.0.jar" ]; then
         https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.9.0/kotlinx-coroutines-core-jvm-1.9.0.jar
 fi
 
-git pull
 
 # Wipe first: a failed compile leaves the PREVIOUS run's classes in out/, and
 # JUnit then reports a green suite for code that never built.
