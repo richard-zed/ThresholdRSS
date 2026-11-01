@@ -184,7 +184,12 @@ private fun FeedListScreen(
                         key = { "day-${it.dayStart}" },
                     ) { bucket ->
                         DayHeader(bucket.dayStart)
-                        items(
+                        // Kotlin resolves an unqualified items() inside the
+                        // outer items() block against LazyItemScope, which has
+                        // no such member, so the compiler refuses it rather
+                        // than silently picking one. this@LazyColumn names the
+                        // scope that does have it.
+                        this@LazyColumn.items(
                             bucket.items,
                             // Item.id is only unique within a feed, so the key
                             // has to combine both. A bare id would collide as
@@ -266,8 +271,10 @@ private fun DayHeader(dayStart: Long) {
     )
 }
 
+// Not private: ReaderScreen.kt renders the same row for a single feed. Two
+// copies would drift, and they already carry the same key/callback shape.
 @Composable
-private fun ItemRow(
+internal fun ItemRow(
     item: Item,
     feedTitle: String,
     failure: String?,

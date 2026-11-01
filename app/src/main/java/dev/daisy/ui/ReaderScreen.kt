@@ -29,7 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.daisy.core.Feed
 import dev.daisy.core.Item
 import java.text.DateFormat
 import java.util.Date
@@ -58,7 +60,12 @@ fun ReaderScreen(
         value = vm.itemsFor(feedId)
     }
     var open by remember { mutableStateOf<Item?>(null) }
-    val feed by produceState(feedId) { value = vm.feedById(feedId) }
+    // produceState(keys) without an explicit initialValue infers T from the
+    // keys -- here a Long -- so the block's Feed? return then fails to match.
+    // Naming the type parameter is what disambiguates the overload.
+    val feed by produceState<Feed?>(initialValue = null, feedId) {
+        value = vm.feedById(feedId)
+    }
 
     val article = open
     if (article != null) {
