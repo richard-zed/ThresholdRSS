@@ -172,6 +172,18 @@ class Discoverer(
                         )
                     }
 
+                    // A page fetched to resolve a YouTube handle is not a feed and
+                    // never will be, but the id we wanted is in it. Resolve, and
+                    // promote the feed so it costs no further discovery request.
+                    // Checked against the FINAL url too: /@handle redirects to
+                    // /channel/UC... often enough that reading the body is
+                    // frequently unnecessary.
+                    if (UrlCandidates.isYoutube(candidate.url)) {
+                        val id = YoutubeChannel.idFromChannelPath(result.finalUrl)
+                            ?: YoutubeChannel.idFromPage(result.body)
+                        if (id != null) plan.promote(listOf(YoutubeChannel.feedUrl(id)))
+                    }
+
                     // Not a feed. If it is HTML it may still name the feed.
                     // Only the body is scanned: FetchResult.Ok does not carry
                     // response headers, so the Link: header path is unreachable

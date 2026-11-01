@@ -104,7 +104,12 @@ object UrlCandidates {
         // One request to resolve, then the answer is a url.
         youtubeCandidates(trimmed).forEach { add(it, Candidate.Kind.PATTERN_RULE) }
 
-        if (siteHandlesDiscovery) {
+        // YouTube is EXCLUDED from path guessing: its channel page is the
+        // discovery fetch (candidates above already include it), and
+        // youtube.com/feed, /rss, /feed.xml and the rest are 404s. Guessing
+        // eight paths there is eight wasted requests and eight budget charges,
+        // which can starve the page fetch that would have answered.
+        if (siteHandlesDiscovery && !isYoutube(trimmed)) {
             // No separate discovery-page candidate: the as-given url is already
             // that fetch. If it returns HTML we hold the body, so reading
             // <link rel=alternate> off it costs nothing extra.
@@ -177,25 +182,25 @@ object UrlCandidates {
     /**
      * YouTube: every form reduces to a channel id, then one canonical feed url.
      *
-     * /channel/UC... carries the id directly. /@handle and /c/name and /user/name
-     * do not, and need an HTML fetch -- see YoutubeChannel. This returns the
-     * canonical feed for the direct case only; a handle has to be resolved
-     * first, so it is represented as the page to fetch.
+     * /channel/UC... carries the id directly, so it is answered here with no
+     * extra request. /@handle, /c/name and /user/name do not, and the page has
+     * to be fetched to find it -- see [YoutubeChannel]. Those are returned as
+     * the PAGE url, because the page is the thing to fetch; [Discoverer] turns
+     * the body into a feed url when it comes back.
+     *
+     * A direct id is emitted as the feed and the page is not needed, so the
+     * direct case costs exactly the same one request as the handle case.
      */
     private fun youtubeCandidates(url: String): List<String> {
         if (!isYoutube(url)) return emptyList()
-        val id = channelIdInPath(url) ?: return emptyList()
-        return listOf("https://www.youtube.com/feeds/videos.xml?channel_id=$id")
+        YoutubeChannel.idFromChannelPath(url)?.let {
+            return listOf(YoutubeChannel.feedUrl(it))
+        }
+        return if (YoutubeChannel.needsResolution(url)) listOf(url) else emptyList()
     }
 
     /** Extracts `UC...` from a /channel/ path, or null. */
-    fun channelIdInPath(url: String): String? {
-        val idx = url.indexOf("/channel/")
-        if (idx < 0) return null
-        val rest = url.substring(idx + "/channel/".length)
-        val id = rest.takeWhile { it.isLetterOrDigit() || it == '_' || it == '-' }
-        return if (id.startsWith("UC") && id.length > 2) id else null
-    }
+    fun channelIdInPath(url: String): String? = YoutubeChannel.idFromChannelPath(url)
 
     private fun looksLikeUrl(s: String): Boolean =
         s.startsWith("http://") || s.startsWith("https://")

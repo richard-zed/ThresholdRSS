@@ -205,4 +205,65 @@ class DiscovererTest {
         assertEquals(1, states.count { it is DiscoverState.Found })
         assertEquals(states.last(), states.lastOrNull { it is DiscoverState.Found })
     }
+
+    // --- youtube --------------------------------------------------------------
+
+    @Test
+    fun a direct channel id goes straight to the feed() {
+        val feed = "https://www.youtube.com/feeds/videos.xml?channel_id=UCdirect"
+        val f = FakeFetcher(mapOf(feed to FetchResult.Ok(feed, "application/atom+xml", rss("Chan"), 200)))
+        val (result, _) = run(f, "https://www.youtube.com/channel/UCdirect")
+
+        assertTrue(result is DiscoverState.Found)
+        assertEquals(feed, (result as DiscoverState.Found).feedUrl)
+        // One request, and it is the feed -- the page is never fetched.
+        assertEquals(listOf(feed), f.requested)
+    }
+
+    @Test
+    fun a handle costs one page fetch then the feed() {
+        val page = "https://www.youtube.com/@someone"
+        val feed = "https://www.youtube.com/feeds/videos.xml?channel_id=UChandle"
+        val body = """<link rel="canonical" href="https://www.youtube.com/channel/UChandle">"""
+        val f = FakeFetcher(mapOf(
+            page to FetchResult.Ok(page, "text/html", body, 200),
+            feed to FetchResult.Ok(feed, "application/atom+xml", rss("Chan"), 200),
+        ))
+        val (result, _) = run(f, page)
+
+        assertTrue(result is DiscoverState.Found)
+        assertEquals(feed, (result as DiscoverState.Found).feedUrl)
+        assertEquals(listOf(page, feed), f.requested)
+    }
+
+    @Test
+    fun a handle that redirects to a channel url needs no body parse() {
+        // The final url already carries the id, so the feed is promoted from
+        // the resolved url alone. Body here has no id at all, which is the
+        // point: if resolution depended on the body this test would fail.
+        val page = "https://www.youtube.com/@someone"
+        val resolved = "https://www.youtube.com/channel/UCredirected"
+        val feed = "https://www.youtube.com/feeds/videos.xml?channel_id=UCredirected"
+        val f = FakeFetcher(mapOf(
+            page to FetchResult.Ok(resolved, "text/html", "<html></html>", 200),
+            feed to FetchResult.Ok(feed, "application/atom+xml", rss("Chan"), 200),
+        ))
+        val (result, _) = run(f, page)
+
+        assertTrue(result is DiscoverState.Found)
+        assertEquals(feed, (result as DiscoverState.Found).feedUrl)
+    }
+
+    @Test
+    fun a youtube page with no id does not invent a feed() {
+        val page = "https://www.youtube.com/@nobody"
+        val f = FakeFetcher(mapOf(
+            page to FetchResult.Ok(page, "text/html", "<html>Before you continue</html>", 200),
+        ))
+        val (result, _) = run(f, page)
+
+        // Every candidate failed; nothing claiming a channel id was tried.
+        assertTrue(result is DiscoverState.NotFound)
+        assertFalse(f.requested.any { it.contains("channel_id=") })
+    }
 }
