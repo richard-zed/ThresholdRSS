@@ -75,9 +75,10 @@ class OkHttpFetcher(
 
         try {
             client.newCall(request).execute().use { response ->
-                // OkHttp 5 declares body non-null. An empty 204 still yields a
-                // zero-length body rather than null.
-                val bytes = response.body.bytes()
+                // OkHttp 4 declares body nullable, unlike 5. A 204 genuinely
+                // has none, so this is a real case and not defensive noise:
+                // treat it as an empty body rather than failing the fetch.
+                val bytes = response.body?.bytes() ?: ByteArray(0)
                 val charset = charsetOf(response.header("Content-Type"))
                 FetchResult.Ok(
                     finalUrl = response.request.url.toString(),

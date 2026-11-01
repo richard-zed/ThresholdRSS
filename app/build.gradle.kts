@@ -48,7 +48,12 @@ dependencies {
     // Interface-only: OkHttpFetcher is the sole place this is referenced, so
     // swapping clients touches one file. 5.x needs API 21+; 4.12.0 is the
     // fallback if the toolchain in Termux is older.
-    implementation("com.squareup.okhttp3:okhttp:5.5.1")
+    // Pinned to 4.12.0 on purpose. OkHttp 5.5.0 raised its own compileSdk
+    // floor to 37, which this project does not meet and should not chase:
+    // nothing in Daisy needs an API 37 symbol, and moving off AGP 8.7.2 for
+    // it would drag in a newer Gradle and JDK for no functional gain.
+    // 4.x has no okhttp-android split, so the floor never appears.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Discoverer.discover is a suspend function, so tests need runBlocking.
     // core publishes no Flow or Dispatchers, so this stays an implementation
