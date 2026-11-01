@@ -1,0 +1,149 @@
+package dev.daisy.core
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class DiscoverTest {
+
+    private fun urls(input: String, siteHandles: Boolean = true) =
+        UrlCandidates.forInput(input, siteHandles).map { it.url }
+
+    // --- ordering ------------------------------------------------------------
+
+    @Test
+    fun `the url as typed is always tried first`() {
+        assertEquals(
+            "https://example.com/feed",
+            urls("https://example.com/feed").first(),
+        )
+    }
+
+    @Test
+    fun `zero-cost suffix rules beat any rule that costs a fetch`() {
+        val list = urls("https://mastodon.social/@someone")
+        // .rss costs no extra request, so it must precede the discovery page
+        // even though discovery is the more "general purpose" route.
+        val suffixIdx = list.indexOf("https://mastodon.social/@someone.rss")
+        val pageIdx = list.indexOf("https://mastodon.social/@someone")
+        assertTrue(suffixIdx in 0 until pageIdx)
+    }
+
+    @Test
+    fun `the discovery page comes before guessed paths`() {
+        val list = urls("https://example.com")
+        val pageIdx = list.indexOf("https://example.com")
+        val pathIdx = list.indexOf("https://example.com/feed")
+        assertTrue(pageIdx in 0 until pathIdx)
+    }
+
+    @Test
+    fun `conventional paths are guessed in order`() {
+        val paths = UrlCandidates.forInput("https://example.com")
+            .filter { it.kind == Candidate.Kind.CONVENTIONAL_PATH }
+            .map { it.url }
+        assertEquals("https://example.com/feed", paths.first())
+        assertTrue(paths.contains("https://example.com/rss.xml"))
+    }
+
+    @Test
+    fun `a url is never listed twice`() {
+        // youtube.com/feeds/... is not a conventional path, but /feed on a bare
+        // origin duplicates nothing; the guard is what this pins.
+        val list = UrlCandidates.forInput("https://example.com/feed").map { it.url }
+        assertEquals(list.size, list.toSet().size)
+    }
+
+    // --- classification ------------------------------------------------------
+
+    @Test
+    fun `a youtube channel url maps straight to the canonical feed`() {
+        val list = urls("https://www.youtube.com/channel/UCabc123")
+        assertTrue(
+            list.contains("https://www.youtube.com/feeds/videos.xml?channel_id=UCabc123")
+        )
+    }
+
+    @Test
+    fun `a youtube handle is not guessed at, because the id is unknown`() {
+        val list = urls("https://www.youtube.com/@someone")
+        // No feed url can be built without the channel id, so nothing is invented.
+        assertTrue(list.none { it.contains("videos.xml") })
+    }
+
+    @Test
+    fun `a youtube short link classifies as youtube`() {
+        assertTrue(UrlCandidates.isYoutube("https://youtu.be/xyz"))
+    }
+
+    @Test
+    fun `a mastodon profile gets one rss suffix`() {
+        assertEquals(
+            listOf("https://mastodon.social/@someone.rss"),
+            UrlCandidates.forInput("https://mastodon.social/@someone")
+                .filter { it.kind == Candidate.Kind.SUFFIX_RULE }
+                .map { it.url },
+        )
+    }
+
+    @Test
+    fun `a subreddit gets both rss spellings`() {
+        val suffix = UrlCandidates.forInput("https://reddit.com/r/android")
+            .filter { it.kind == Candidate.Kind.SUFFIX_RULE }
+            .map { it.url }
+        assertEquals(
+            listOf("https://reddit.com/r/android/.rss", "https://reddit.com/r/android.rss"),
+            suffix,
+        )
+    }
+
+    @Test
+    fun `a url that already ends in rss is not suffixed again`() {
+        val suffix = UrlCandidates.forInput("https://mastodon.social/@someone.rss")
+            .filter { it.kind == Candidate.Kind.SUFFIX_RULE }
+        assertTrue(suffix.isEmpty())
+    }
+
+    // --- rejection -----------------------------------------------------------
+
+    @Test
+    fun `a bare host with no scheme yields nothing`() {
+        assertTrue(UrlCandidates.forInput("example.com").isEmpty())
+    }
+
+    @Test
+    fun `whitespace around a url is tolerated`() {
+        assertEquals(
+            "https://example.com/feed",
+            UrlCandidates.forInput("  https://example.com/feed  ").first().url,
+        )
+    }
+
+    @Test
+    fun `origin drops the path`() {
+        assertEquals("https://example.com", UrlCandidates.origin("https://example.com/a/b?c=1"))
+    }
+
+    @Test
+    fun `channelIdInPath insists on the UC prefix`() {
+        assertNull(UrlCandidates.channelIdInPath("https://www.youtube.com/channel/abc"))
+        assertEquals(
+            "UCxyz",
+            UrlCandidates.channelIdInPath("https://www.youtube.com/channel/UCxyz/videos"),
+        )
+    }
+
+    // --- indicator state -----------------------------------------------------
+
+    @Test
+    fun `the four indicator states are distinct`() {
+        val states: List<DiscoverState> = listOf(
+            DiscoverState.Idle,
+            DiscoverState.Looking(),
+            DiscoverState.Found("https://a/feed", "A"),
+            DiscoverState.NotFound(listOf(Attempt("https://a", Attempt.Outcome.HTTP_ERROR, "404"))),
+        )
+        assertEquals(states.size, states.toSet().size)
+    }
+}
