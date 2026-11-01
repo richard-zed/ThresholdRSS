@@ -60,7 +60,8 @@ sealed interface DiscoverError {
  * that costs a fetch, regardless of how confident we are:
  *
  *   1. the URL exactly as given (the user may already know the feed URL)
- *   2. known-suffix rules: Mastodon, Reddit -- append `.rss`, no extra request
+ *   2. known-suffix rules: Mastodon, Lemmy, GitHub, Tumblr, Medium -- append
+ *      `.rss` / `.atom`, no extra request
  *   3. known-pattern rules: YouTube -- needs one HTML fetch to resolve a handle
  *   4. generic discovery: the site's own <link rel=alternate>, HTTP Link header,
  *      then conventional paths
@@ -117,18 +118,53 @@ object UrlCandidates {
     }
 
     /**
-     * `example.social/@user` -> `example.social/@user.rss`, and the /.rss form
-     * some instances use. Reddit's `/r/<sub>` -> `/r/<sub>/.rss`.
+     * Feed URLs derivable from the input by appending a known suffix. Every
+     * one of these costs exactly one request, the same as the as-given attempt,
+     * which is why they all sit in the zero-cost tier.
+     *
+     * DELIBERATELY NO `youtu.be`-style host rewriting here: a suffix rule must
+     * produce a url on the SAME origin, or it is a pattern rule in disguise and
+     * belongs in its own tier with its own cost.
      */
     private fun suffixRules(url: String): List<String> {
         val noTrailing = url.trimEnd('/')
         return when {
-            // Reddit: both spellings are real endpoints.
+            // Reddit: both spellings are real endpoints. NOTE: Reddit ends RSS
+            // support on 2026-11-13, after which these 404 -- harmless, one
+            // cheap request, and the fallback path picks up whatever replaces
+            // it. Kept because the cost of being wrong is one request.
             noTrailing.contains("reddit.com/r/") && !noTrailing.contains(".rss") ->
                 listOf("$noTrailing/.rss", "$noTrailing.rss")
-            // Mastodon and friends: /@user.rss on most instances.
+
+            // Mastodon and friends: /@user.rss on most instances. Lemmy, kbin
+            // and Mbin also serve /<community>.rss, which is the same shape --
+            // a bare community path with no /@ to key on, so it is handled by
+            // the generic ".rss append" case below.
             noTrailing.contains("/@") && !noTrailing.endsWith(".rss") ->
                 listOf("$noTrailing.rss")
+
+            // GitHub: user activity and repo feeds are Atom, not RSS.
+            // github.com/<user>.atom, and a repo page adds releases/commits.
+            hostOf(noTrailing) == "github.com" && !noTrailing.endsWith(".atom") ->
+                when (pathSegments(noTrailing)) {
+                    1 -> listOf("$noTrailing.atom")
+                    2 -> listOf("$noTrailing/releases.atom", "$noTrailing/commits.atom")
+                    else -> emptyList()
+                }
+
+            // Medium: medium.com/feed/@user, and <user>.medium.com/feed.
+            hostOf(noTrailing)?.endsWith("medium.com") == true && !noTrailing.endsWith("/feed") ->
+                listOf("$noTrailing/feed")
+
+            // Tumblr: /<blog>/rss.
+            hostOf(noTrailing)?.endsWith("tumblr.com") == true && !noTrailing.endsWith("/rss") ->
+                listOf("$noTrailing/rss")
+
+            // Hacker News front page. User profiles need an id lookup, so they
+            // are not a suffix rule.
+            noTrailing == "news.ycombinator.com" || noTrailing == "https://news.ycombinator.com" ->
+                listOf("https://news.ycombinator.com/rss")
+
             else -> emptyList()
         }
     }
@@ -173,6 +209,19 @@ object UrlCandidates {
      * but note that [origin] rebuilds from THIS value -- which is why origin
      * is only used for conventional-path guessing, never for identity.
      */
+    /**
+     * Number of non-empty path segments, ignoring query, fragment and a
+     * trailing slash. `example.com` -> 0, `example.com/a` -> 1,
+     * `example.com/a/b/` -> 2.
+     *
+     * Separate from [hostOf] because hostOf returns a bare host -- counting
+     * slashes in it always yields zero, which silently picks the wrong branch.
+     */
+    fun pathSegments(url: String): Int {
+        val path = url.substringAfter("://", "").substringAfter('/', "").substringBefore('?').substringBefore('#')
+        return path.split('/').count { it.isNotEmpty() }
+    }
+
     fun hostOf(url: String): String? {
         val afterScheme = url.substringAfter("://", "")
         if (afterScheme.isEmpty()) return null
