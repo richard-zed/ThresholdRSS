@@ -43,7 +43,13 @@ sealed interface FetchResult {
         is Failed -> if (status == null) Attempt.Outcome.NETWORK_ERROR else Attempt.Outcome.HTTP_ERROR
     }
 
-    fun detail(): String? = when (this) {
+    /**
+     * Non-null by construction: every branch has something to say. The old
+     * String? return forced a `?: "fetch failed"` at each call site that
+     * stored the result in a non-null field, which is noise -- a Failed always
+     * carries a status or a reason.
+     */
+    fun detail(): String = when (this) {
         is Ok -> "HTTP $status"
         is Failed -> status?.let { "HTTP $it" } ?: reason
     }

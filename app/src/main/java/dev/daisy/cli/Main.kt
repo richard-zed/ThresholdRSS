@@ -153,7 +153,11 @@ object Main {
                 val r = fetcher.get(state.feedUrl)
                 if (r !is FetchResult.Ok) { println("fetch failed"); return@runBlocking }
                 val parsed = FeedParser.parse(r.body, r.finalUrl)
-                if (parsed !is FeedParser.Result.Ok) { println("parse failed"); return@runBlocking }
+                if (parsed is FeedParser.Result.Error) {
+                    println("parse failed: ${parsed.reason}")
+                    return@runBlocking
+                }
+                val ok = parsed as FeedParser.Result.Ok
 
                 val feeds = store.loadFeeds()
                 if (feeds.any { it.url == state.feedUrl }) {
@@ -164,7 +168,7 @@ object Main {
                 val feed = Feed(
                     id = id,
                     url = state.feedUrl,
-                    title = state.title ?: parsed.title ?: state.feedUrl,
+                    title = state.title ?: ok.title ?: state.feedUrl,
                     siteUrl = null,
                     lastFetched = System.currentTimeMillis(),
                 )
@@ -172,7 +176,7 @@ object Main {
                 val now = System.currentTimeMillis()
                 store.saveItems(
                     id,
-                    parsed.items.mapIndexed { idx, inc ->
+                    ok.items.mapIndexed { idx, inc ->
                         Item(
                             id = idx.toLong(),
                             feedId = id,
@@ -186,7 +190,7 @@ object Main {
                         )
                     },
                 )
-                println("added ${feed.title} ($id) with ${parsed.items.size} items")
+                println("added ${feed.title} ($id) with ${ok.items.size} items")
             }
 
             "sync" -> {
@@ -216,10 +220,11 @@ object Main {
 
                         is FetchResult.Ok -> {
                             val parsed = FeedParser.parse(r.body, r.finalUrl)
-                            if (parsed !is FeedParser.Result.Ok) {
+                            if (parsed is FeedParser.Result.Error) {
                                 outcomes.add(Sync.Outcome.Failed(feed.id, "parse: ${parsed.reason}"))
                             } else {
-                                val incoming = parsed.items.map { inc ->
+                                val ok = parsed as FeedParser.Result.Ok
+                                val incoming = ok.items.map { inc ->
                                     IncomingItem(
                                         guid = inc.guid,
                                         title = inc.title,
@@ -231,7 +236,7 @@ object Main {
                                 }
                                 val out = Sync.apply(
                                     feedId = feed.id,
-                                    title = parsed.title,
+                                    title = ok.title,
                                     existing = store.loadItems(feed.id),
                                     incoming = incoming,
                                     now = now,
