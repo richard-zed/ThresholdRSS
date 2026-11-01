@@ -95,7 +95,13 @@ object UrlCandidates {
             if (seen.add(url)) out.add(Candidate(url, kind))
         }
 
-        add(trimmed, Candidate.Kind.AS_GIVEN)
+        // The as-given url is normally unconditional: it is the cheapest way
+        // to answer when the user pasted a feed link. The one exception is a
+        // youtube url whose own path already carries the channel id -- that
+        // page is HTML, never a feed, and the pattern rule below already knows
+        // the feed url, so fetching it can only waste a request.
+        val idAlreadyKnown = isYoutube(trimmed) && YoutubeChannel.idFromChannelPath(trimmed) != null
+        if (!idAlreadyKnown) add(trimmed, Candidate.Kind.AS_GIVEN)
 
         // Zero-cost suffix rules: the site exposes a feed at <url>.rss or
         // equivalent. No discovery request is needed, so these beat everything.

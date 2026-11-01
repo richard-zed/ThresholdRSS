@@ -210,14 +210,21 @@ class DiscovererTest {
     // --- youtube --------------------------------------------------------------
 
     @Test
-    fun `a direct channel id goes straight to the feed`() {
+    fun `a direct channel id skips the channel page and fetches the feed`() {
+        val page = "https://www.youtube.com/channel/UCdirect"
         val feed = "https://www.youtube.com/feeds/videos.xml?channel_id=UCdirect"
-        val f = FakeFetcher(mapOf(feed to FetchResult.Ok(feed, "application/atom+xml", rss("Chan"), 200)))
-        val (result, _) = run(f, "https://www.youtube.com/channel/UCdirect")
+        val f = FakeFetcher(
+            mapOf(
+                page to FetchResult.Ok(page, "text/html", "<html>no id here</html>", 200),
+                feed to FetchResult.Ok(feed, "application/atom+xml", rss("Chan"), 200),
+            ),
+        )
+        val (result, _) = run(f, page)
 
         assertTrue(result is DiscoverState.Found)
         assertEquals(feed, (result as DiscoverState.Found).feedUrl)
-        // One request, and it is the feed -- the page is never fetched.
+        // The id is in the path, so the channel page is known to be HTML and
+        // is skipped entirely. One request, and it is the feed.
         assertEquals(listOf(feed), f.requested)
     }
 
