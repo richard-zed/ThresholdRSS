@@ -85,17 +85,22 @@ class HttpFetcher(
      * The charset from a Content-Type header, defaulting to UTF-8.
      *
      * Feeds are overwhelmingly UTF-8, and guessing ISO-8859-1 (the HTTP default)
-     * would mangle every accented title. A declared charset is honoured.
+     * would mangle every accented title. A declared charset is honoured when it
+     * is one the JVM knows; an unknown name falls back rather than throwing,
+     * because a server naming an encoding it invented is not a reason to fail
+     * the fetch.
      */
-    private fun charsetOf(contentType: String?): String {
-        if (contentType == null) return "UTF-8"
+    private fun charsetOf(contentType: String?): java.nio.charset.Charset {
+        val utf8 = java.nio.charset.Charset.forName("UTF-8")
+        if (contentType == null) return utf8
         val part = contentType.split(';').firstOrNull { it.trim().startsWith("charset=", true) }
-            ?: return "UTF-8"
+            ?: return utf8
         val name = part.substringAfter('=').trim().trim('"')
+        if (name.isEmpty()) return utf8
         return try {
-            if (java.nio.charset.Charset.isSupported(name)) name else "UTF-8"
+            java.nio.charset.Charset.forName(name)
         } catch (_: Exception) {
-            "UTF-8"
+            utf8
         }
     }
 }

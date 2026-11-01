@@ -40,7 +40,7 @@ interface FileSpace {
  * refresh then scales with the feed being refreshed, not with the library.
  *
  * The trade, accepted deliberately: cross-feed ordering (which the date
- * separators need) means reading every feeds/*.json once at launch. At twenty
+ * separators need) means reading every file under feeds/ once at launch. At twenty
  * feeds that is twenty small reads; at two hundred it would be worth an index,
  * and an index can be added later without changing this shape.
  *
