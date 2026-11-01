@@ -11,8 +11,11 @@ set -e
 
 # kotlinc 2.x ships a native Jansi for console colour. Termux cannot load it
 # (it wants glibc) and the refusal prints a UnsatisfiedLinkError stack before
-# any of our output. TERM=dumb tells Jansi not to try. Harmless either way.
+# any of our output. TERM=dumb does NOT suppress this: Jansi probes its native
+# library at class-init, before it ever consults TERM, so the export was inert.
+# -Djansi.passthrough=true is the switch that actually skips the native load.
 export TERM=dumb
+JANSI=-Djansi.passthrough=true
 
 # Where daisy.jar lands. Defaults to the project's Android tree; the build
 # product is separate from the source tree so ./cli.sh and ./build.sh never
@@ -45,10 +48,13 @@ fi
 # is an Android dependency; HttpFetcher is the JDK one the CLI uses instead.
 rm -rf out-cli
 mkdir -p "$OUT"
+# kotlinc is a java launcher underneath, so JANSI has to reach it too -- that is
+# where the UnsatisfiedLinkError stack is actually printed.
 kotlinc \
     "$CORE"/{Model,Identity,Merge,DayBuckets,Discover,Fetch,Discoverer,YoutubeChannel,FeedParse,Dates,Json,Store,Opml,HttpFetcher}.kt \
     "$CLI"/Main.kt \
     -classpath "$CP_CORO" \
+    -J$JANSI \
     -d out-cli
 
 # A manifest is a text file ending in a newline. Built with a here-doc rather
@@ -64,4 +70,4 @@ echo "wrote $OUT/daisy.jar"
 
 # The CLI needs the coroutines jar and the stdlib at runtime; a fat jar would be
 # tidier but would need the Android build to agree on its contents.
-exec java -cp "$OUT/daisy.jar:$CP_CORO:$STDLIB" dev.daisy.cli.Main "$@"
+exec java $JANSI -cp "$OUT/daisy.jar:$CP_CORO:$STDLIB" dev.daisy.cli.Main "$@"
