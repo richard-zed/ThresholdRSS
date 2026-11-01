@@ -66,7 +66,12 @@ object Merge {
                     link = inc.link,
                     summary = inc.summary,
                     imageUrl = inc.imageUrl,
-                    published = inc.published,
+                    // Undated items are stamped with fetch time AT INSERT ONLY.
+                    // A feed that gives no date has no better answer than "we
+                    // first saw it now". See the update branch: existing rows
+                    // are never re-stamped, or every poll would drag a dateless
+                    // item back to the top of the list.
+                    published = inc.published ?: now,
                     fetchedAt = now,
                 )
                 inserted++
@@ -100,9 +105,10 @@ object Merge {
      * window, and trimming by insertion order would drop a live item from the
      * top of the feed instead.
      *
-     * Nulls go to the BOTTOM. The obvious bug is treating null as 0, which
-     * projects undated items to 1970 and buries them; the subtler one is
-     * treating null as now, which floats every broken item to the top forever.
+     * Nulls should no longer reach here -- merge stamps them at insert -- but
+     * the comparator stays total anyway. A null treated as 0 projects items to
+     * 1970 and buries them; treated as now, every broken item floats to the top
+     * forever. Staying explicit costs one branch and removes the question.
      */
     fun capAndSort(items: List<Item>, cap: Int = MAX_ITEMS_PER_FEED): List<Item> {
         val sorted = items.sortedWith(ITEM_ORDER)

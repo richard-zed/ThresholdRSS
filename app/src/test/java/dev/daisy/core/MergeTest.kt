@@ -110,17 +110,6 @@ class MergeTest {
     // --- ordering traps ------------------------------------------------------
 
     @Test
-    fun `null published sorts to the bottom, not to epoch 0`() {
-        val items = listOf(
-            incoming("old", published = now - 10_000_000),
-            incoming("undated", published = null),
-            incoming("new", published = now),
-        )
-        val merged = Merge.merge(feedA, emptyList(), items, now)
-        assertEquals(listOf("new", "old", "undated"), merged.items.map { it.guid })
-    }
-
-    @Test
     fun `identical timestamps keep a stable order`() {
         val batch = listOf(incoming("b"), incoming("a"), incoming("c"))
         val first = Merge.merge(feedA, emptyList(), batch, now)
@@ -154,6 +143,52 @@ class MergeTest {
         assertEquals(5, second.items.size)
         assertTrue("newest item survived", second.items.any { it.guid == "g1" })
         assertTrue("ancient was trimmed", second.items.none { it.guid == "ancient" })
+    }
+
+    // --- undated stamping ----------------------------------------------------
+
+    @Test
+    fun `an undated item is stamped with fetch time at insert`() {
+        val merged = Merge.merge(feedA, emptyList(), listOf(incoming("u", published = null)), now)
+        assertEquals(1, merged.inserted)
+        assertEquals(now, merged.items[0].published)
+    }
+
+    @Test
+    fun `a stamped item is not re-stamped on a later fetch`() {
+        val first = Merge.merge(feedA, emptyList(), listOf(incoming("u", published = null)), now)
+
+        // A poll an hour later, still no date from the feed.
+        val hour = 3_600_000L
+        val second = Merge.merge(feedA, first.items, listOf(incoming("u", published = null)), now + hour)
+
+        assertEquals(0, second.inserted)
+        // The stamp must not move -- otherwise a dateless item climbs to the top
+        // of the list on every poll, forever.
+        assertEquals(now, second.items[0].published)
+    }
+
+    @Test
+    fun `a real date arriving later overrides the stamp`() {
+        val first = Merge.merge(feedA, emptyList(), listOf(incoming("u", published = null)), now)
+        assertEquals(now, first.items[0].published)
+
+        // The feed backfills a real timestamp from last week.
+        val real = now - 7 * 86_400_000L
+        val second = Merge.merge(feedA, first.items, listOf(incoming("u", published = real)), now + 1000)
+
+        assertEquals(real, second.items[0].published)
+    }
+
+    @Test
+    fun `a stamped item sorts by its stamp, not to the bottom`() {
+        val items = listOf(
+            incoming("old", published = now - 10_000_000),
+            incoming("undated", published = null),
+        )
+        val merged = Merge.merge(feedA, emptyList(), items, now)
+        // The stamp is `now`, so it sorts to the TOP, above the older dated item.
+        assertEquals(listOf("undated", "old"), merged.items.map { it.guid })
     }
 
     // --- identity ------------------------------------------------------------

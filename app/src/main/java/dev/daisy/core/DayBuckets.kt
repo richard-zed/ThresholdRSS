@@ -14,25 +14,24 @@ data class DayBucket(
  * sort -- doing so would silently paper over a caller that passed the wrong
  * order, and the two would then disagree about null handling.
  *
- * Undated items are collected into a single trailing bucket under [UNDATED],
- * because a null published date is extremely common (Reddit especially) and
- * they have to land somewhere visible rather than being dropped.
+ * Every item is expected to carry a published date: merge stamps undated items
+ * with fetch time at insert, so the UNDATED sentinel this file used to have is
+ * gone. The null branch below is defensive only -- if one arrives it trails the
+ * list rather than being silently dropped, because losing items is worse than a
+ * slightly odd group.
  */
 object DayBuckets {
-
-    /** Sentinel dayStart for the undated bucket. Deliberately not a real time. */
-    const val UNDATED = Long.MIN_VALUE
 
     fun group(items: List<Item>, zone: TimeZoneInfo): List<DayBucket> {
         if (items.isEmpty()) return emptyList()
 
         val out = ArrayList<DayBucket>()
-        var currentStart = Long.MIN_VALUE
+        var currentStart: Long? = null
         var current = ArrayList<Item>()
 
         fun flush() {
             if (current.isNotEmpty()) {
-                out.add(DayBucket(currentStart, current))
+                out.add(DayBucket(currentStart ?: Long.MIN_VALUE, current))
                 current = ArrayList()
             }
         }
@@ -40,14 +39,12 @@ object DayBuckets {
         for (it in items) {
             val p = it.published
             if (p == null) {
-                // Undated always trails. Sorted input guarantees they are last,
-                // but be explicit so a caller passing sorted-but-wrong order
-                // still gets something coherent.
-                if (currentStart != UNDATED) { flush(); currentStart = UNDATED }
+                // Should not happen post-stamp. Defensive: keep it, trailing.
+                if (currentStart != null) flush()
+                currentStart = null
                 current.add(it)
                 continue
             }
-            if (currentStart == UNDATED) flush()
             val start = zone.startOfDay(p)
             if (start != currentStart) {
                 flush()
