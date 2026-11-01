@@ -124,9 +124,33 @@ class DiscoverTest {
 
     // --- rejection -----------------------------------------------------------
 
+    // A bare host is the NORMAL input -- it is what a user pastes. This used to
+    // return an empty plan, so discovery reported NotFound(tried=[]) having made
+    // zero requests, while the same host with https:// worked. The scheme is
+    // supplied by the planner now.
     @Test
-    fun `a bare host with no scheme yields nothing`() {
-        assertTrue(UrlCandidates.forInput("example.com").isEmpty())
+    fun `a bare host is discovered, not rejected`() {
+        val plan = UrlCandidates.forInput("example.com")
+        assertTrue(plan.isNotEmpty())
+        assertEquals("https://example.com", plan.first().url)
+    }
+
+    @Test
+    fun `a bare host keeps its path`() {
+        assertEquals(
+            "https://example.com/blog",
+            UrlCandidates.forInput("example.com/blog").first().url,
+        )
+    }
+
+    @Test
+    fun `a single word with no dot is still not a url`() {
+        assertTrue(UrlCandidates.forInput("notaurl").isEmpty())
+    }
+
+    @Test
+    fun `a sentence is not a url`() {
+        assertTrue(UrlCandidates.forInput("this is not a link").isEmpty())
     }
 
     @Test

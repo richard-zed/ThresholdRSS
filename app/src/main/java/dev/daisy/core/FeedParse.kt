@@ -137,19 +137,49 @@ object FeedParser {
      * many video feeds give.
      */
     private fun imageFor(el: El, atom: Boolean): String? {
+        // Wrapper elements whose image-bearing children count as the item's.
+        // YouTube nests media:thumbnail and media:description inside
+        // <media:group>, so scanning direct children only found nothing and
+        // every video row came back with no picture. ONE level of unwrapping:
+        // a group inside a group is not a thing any real feed does, and
+        // recursing would let a malformed feed walk arbitrarily deep.
         for (c in el.children) {
             val n = local(c.name).lowercase()
-            if (atom && n == "link") continue
-            if (n != "thumbnail" && n != "enclosure" && n != "content" && n != "image") continue
-
-            val url = c.attrs["url"] ?: c.attrs["href"] ?: continue
-            if (url.isBlank()) continue
-
-            val type = c.attrs["type"]?.lowercase()
-            if (type != null && type.isNotEmpty() && !type.startsWith("image/")) continue
-            return url
+            if (n == "group") {
+                imageIn(c, atom)?.let { return it }
+                continue
+            }
+            firstImageOf(c, atom)?.let { return it }
         }
         return null
+    }
+
+    /** Direct-children image scan, unwrapping one level of media:group. */
+    private fun imageIn(el: El, atom: Boolean): String? {
+        for (c in el.children) {
+            firstImageOf(c, atom)?.let { return it }
+        }
+        return null
+    }
+
+    // NOTE on ordering: media:group puts <media:content type="application/
+    // x-shockwave-flash"> BEFORE <media:thumbnail>, so the first url-bearing
+    // child is the video, not the picture. firstImageOf's type check is what
+    // rejects it -- removing that check would silently start showing a flash
+    // player url as every YouTube row's image.
+
+    /** A single element's url, if it is an image-bearing element at all. */
+    private fun firstImageOf(c: El, atom: Boolean): String? {
+        val n = local(c.name).lowercase()
+        if (atom && n == "link") return null
+        if (n != "thumbnail" && n != "enclosure" && n != "content" && n != "image") return null
+
+        val url = c.attrs["url"] ?: c.attrs["href"] ?: return null
+        if (url.isBlank()) return null
+
+        val type = c.attrs["type"]?.lowercase()
+        if (type != null && type.isNotEmpty() && !type.startsWith("image/")) return null
+        return url
     }
 
     private fun dateFor(el: El, atom: Boolean): Long? {

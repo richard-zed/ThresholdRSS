@@ -279,4 +279,43 @@ class FeedParseTest {
         )
         assertEquals("https://example.com/t.jpg", items(body).single().imageUrl)
     }
+
+    // YouTube does not put media:thumbnail on the entry -- it nests it inside
+    // <media:group> alongside media:title and media:description. A direct-child
+    // scan therefore found nothing, and every video row had no picture while
+    // the title and date came through fine.
+    @Test
+    fun `a media group supplies an image`() {
+        val ns = "xmlns:media=\"http://search.yahoo.com/mrss/\""
+        val body = rss(
+            "<item><title>A</title><guid>1</guid>" +
+                "<media:group $ns>" +
+                "<media:title>A</media:title>" +
+                "<media:thumbnail url=\"https://example.com/g.jpg\"/>" +
+                "</media:group></item>",
+        )
+        assertEquals("https://example.com/g.jpg", items(body).single().imageUrl)
+    }
+
+    @Test
+    fun `a media group with no image still yields none`() {
+        val ns = "xmlns:media=\"http://search.yahoo.com/mrss/\""
+        val body = rss(
+            "<item><title>A</title><guid>1</guid>" +
+                "<media:group $ns><media:title>A</media:title></media:group></item>",
+        )
+        assertNull(items(body).single().imageUrl)
+    }
+
+    @Test
+    fun `a direct image beats a media group image`() {
+        val ns = "xmlns:media=\"http://search.yahoo.com/mrss/\""
+        val body = rss(
+            "<item><title>A</title><guid>1</guid>" +
+                "<media:thumbnail url=\"https://example.com/direct.jpg\"/>" +
+                "<media:group $ns>" +
+                "<media:thumbnail url=\"https://example.com/group.jpg\"/></media:group></item>",
+        )
+        assertEquals("https://example.com/direct.jpg", items(body).single().imageUrl)
+    }
 }

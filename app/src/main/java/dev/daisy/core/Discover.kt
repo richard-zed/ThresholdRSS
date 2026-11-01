@@ -100,26 +100,27 @@ object UrlCandidates {
         // youtube url whose own path already carries the channel id -- that
         // page is HTML, never a feed, and the pattern rule below already knows
         // the feed url, so fetching it can only waste a request.
-        val idAlreadyKnown = isYoutube(trimmed) && YoutubeChannel.idFromChannelPath(trimmed) != null
-        if (!idAlreadyKnown) add(trimmed, Candidate.Kind.AS_GIVEN)
+        val target = withScheme(trimmed)
+        val idAlreadyKnown = isYoutube(target) && YoutubeChannel.idFromChannelPath(target) != null
+        if (!idAlreadyKnown) add(target, Candidate.Kind.AS_GIVEN)
 
         // Zero-cost suffix rules: the site exposes a feed at <url>.rss or
         // equivalent. No discovery request is needed, so these beat everything.
-        for (suffix in suffixRules(trimmed)) add(suffix, Candidate.Kind.SUFFIX_RULE)
+        for (suffix in suffixRules(target)) add(suffix, Candidate.Kind.SUFFIX_RULE)
 
         // One request to resolve, then the answer is a url.
-        youtubeCandidates(trimmed).forEach { add(it, Candidate.Kind.PATTERN_RULE) }
+        youtubeCandidates(target).forEach { add(it, Candidate.Kind.PATTERN_RULE) }
 
         // YouTube is EXCLUDED from path guessing: its channel page is the
         // discovery fetch (candidates above already include it), and
         // youtube.com/feed, /rss, /feed.xml and the rest are 404s. Guessing
         // eight paths there is eight wasted requests and eight budget charges,
         // which can starve the page fetch that would have answered.
-        if (siteHandlesDiscovery && !isYoutube(trimmed)) {
+        if (siteHandlesDiscovery && !isYoutube(target)) {
             // No separate discovery-page candidate: the as-given url is already
             // that fetch. If it returns HTML we hold the body, so reading
             // <link rel=alternate> off it costs nothing extra.
-            val base = origin(trimmed)
+            val base = origin(target)
             if (base != null) {
                 for (p in CONVENTIONAL_PATHS) add(base + p, Candidate.Kind.CONVENTIONAL_PATH)
             }
@@ -208,8 +209,32 @@ object UrlCandidates {
     /** Extracts `UC...` from a /channel/ path, or null. */
     fun channelIdInPath(url: String): String? = YoutubeChannel.idFromChannelPath(url)
 
-    private fun looksLikeUrl(s: String): Boolean =
-        s.startsWith("http://") || s.startsWith("https://")
+    /**
+     * A bare host is a url, not a typo.
+     *
+     * `phoronix.net` is what a user pastes, and requiring the scheme here made
+     * `forInput` return an EMPTY plan -- so discovery reported NotFound(tried=[])
+     * without a single request, while the same host with https:// worked. The
+     * scheme is supplied downstream by `origin()`/`resolve()`, which already
+     * default to https when it is missing.
+     *
+     * Anything containing a slash before the first dot, or whitespace, is still
+     * rejected: that is a path fragment or a sentence, not a host.
+     */
+    private fun looksLikeUrl(s: String): Boolean {
+        if (s.startsWith("http://") || s.startsWith("https://")) return true
+        if (s.any { it.isWhitespace() }) return false
+        val host = s.substringBefore('/')
+        if (host.isEmpty()) return false
+        // Require a dotted host with a plausible TLD, so "foo" is not a url.
+        val dot = host.lastIndexOf('.')
+        if (dot < 1 || dot == host.length - 1) return false
+        return host.substring(dot + 1).all { it.isLetter() } && host.substring(dot + 1).length >= 2
+    }
+
+    /** The input with an explicit scheme, for use as a fetch target. */
+    private fun withScheme(s: String): String =
+        if (s.startsWith("http://") || s.startsWith("https://")) s else "https://$s"
 
     /** `https://a.b/c` -> `https://a.b`. Null if not parseable. */
     fun origin(url: String): String? {
