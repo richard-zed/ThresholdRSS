@@ -205,6 +205,31 @@ class FeedParseTest {
     }
 
     @Test
+    fun `an unclosed atom entry does not swallow the next one`() {
+        // The same recovery on Atom's spelling, including the namespaced form.
+        val body = """<feed xmlns="http://www.w3.org/2005/Atom">
+            <entry><title>A</title><id>1</id>
+            <entry><title>B</title><id>2</id></entry>
+            </feed>"""
+        val got = items(body)
+        assertEquals(listOf("A", "B"), got.map { it.title })
+        assertEquals(listOf("1", "2"), got.map { it.guid })
+    }
+
+    @Test
+    fun `an unclosed item keeps its own children`() {
+        // Recovery must not hand the second item's fields to the first.
+        val body = "<rss><channel>" +
+            "<item><title>A</title><guid>1</guid><link>https://example.com/a</link>" +
+            "<item><title>B</title><guid>2</guid><link>https://example.com/b</link></item>" +
+            "</channel></rss>"
+        val got = items(body)
+        assertEquals(2, got.size)
+        assertEquals("https://example.com/a", got[0].link)
+        assertEquals("https://example.com/b", got[1].link)
+    }
+
+    @Test
     fun `a stray close tag is ignored`() {
         val body = "<rss><channel><item><title>A</title><guid>1</guid></item></span></channel></rss>"
         assertEquals(1, items(body).size)

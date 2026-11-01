@@ -208,6 +208,11 @@ object FeedParser {
             if (stack.isEmpty()) roots.add(e) else stack.last().children.add(e)
         }
 
+        // Element names that never nest inside themselves. <entry> is Atom's
+        // spelling of <item>; matching on local name covers namespaced feeds.
+        fun isEntryTag(n: String): Boolean =
+            local(n).lowercase().let { it == "item" || it == "entry" }
+
         while (i < n) {
             val lt = src.indexOf('<', i)
             if (lt < 0) {
@@ -279,6 +284,18 @@ object FeedParser {
 
             flush()
             val el = El(name, attrs)
+            if (!selfClosing && isEntryTag(name)) {
+                // A repeated <item> opener means the previous one lost its close
+                // tag. Left alone the scanner nests them and the outer entry
+                // swallows the inner one's title and guid. Retire the open one
+                // so both survive, and insert at the depth it reported to.
+                for (k in stack.indices.reversed()) {
+                    if (stack[k].name == name) {
+                        while (stack.size > k) stack.removeAt(stack.size - 1)
+                        break
+                    }
+                }
+            }
             addEl(el)
             if (!selfClosing) stack.add(el)
         }
