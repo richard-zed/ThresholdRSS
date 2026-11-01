@@ -75,5 +75,9 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
+    // collectAsStateWithLifecycle lives here, not in lifecycle-runtime-ktx.
+    // Pinned to the same version as the viewmodel artifact above; the two are
+    // released together and a split version is a quiet way to get a mismatch.
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("androidx.core:core-ktx:1.13.1")
 }
