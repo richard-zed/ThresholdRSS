@@ -62,50 +62,53 @@ fun ReaderScreen(
 
     val article = open
     if (article != null) {
+        // if/else rather than an early return: a composable that returns before
+        // its remaining calls changes the call-site structure between
+        // compositions, so the produceState above would be torn down and
+        // rebuilt every time an article opens or closes.
         ArticleScreen(item = article, onBack = { open = null })
-        return
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        feed?.title ?: "Feed",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = {
-                    // Label rather than a back arrow: material-icons-core's
-                    // availability varies by version and a text button cannot
-                    // silently render nothing.
-                    TextButton(onClick = onBack) { Text("Back") }
-                },
-            )
-        },
-    ) { padding ->
-        val list = items
-        when {
-            list == null -> Box(Modifier.padding(padding).fillMaxSize(), Alignment.Center) {
-                CircularProgressIndicator()
-            }
-            list.isEmpty() -> Box(Modifier.padding(padding).fillMaxSize(), Alignment.Center) {
-                Text("No items", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            else -> Column(
-                Modifier
-                    .padding(padding)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                list.forEach { item ->
-                    ItemRow(
-                        item = item,
-                        feedTitle = "",
-                        failure = null,
-                        onClick = { open = item },
-                    )
+    } else {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            feed?.title ?: "Feed",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    navigationIcon = {
+                        // Label rather than a back arrow: material-icons-core's
+                        // availability varies by version and a text button cannot
+                        // silently render nothing.
+                        TextButton(onClick = onBack) { Text("Back") }
+                    },
+                )
+            },
+        ) { padding ->
+            val list = items
+            when {
+                list == null -> Box(Modifier.padding(padding).fillMaxSize(), Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                list.isEmpty() -> Box(Modifier.padding(padding).fillMaxSize(), Alignment.Center) {
+                    Text("No items", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                else -> Column(
+                    Modifier
+                        .padding(padding)
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    list.forEach { item ->
+                        ItemRow(
+                            item = item,
+                            feedTitle = "",
+                            failure = null,
+                            onClick = { open = item },
+                        )
+                    }
                 }
             }
         }
