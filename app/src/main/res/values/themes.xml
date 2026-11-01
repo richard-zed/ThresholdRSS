@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Compose draws everything; this theme exists so the window does not flash
+      an unstyled white frame before the first composition. Material You comes
+      from dynamicLightColorScheme/dynamicDarkColorScheme in Kotlin, not here.
+    -->
+    <style name="Theme.Daisy" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

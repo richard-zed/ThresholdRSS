@@ -7,9 +7,11 @@ import dev.daisy.core.FetchResult
 import dev.daisy.core.Feed
 import dev.daisy.core.FileSpace
 import dev.daisy.core.HttpFetcher
+import dev.daisy.core.IncomingItem
 import dev.daisy.core.Item
 import dev.daisy.core.Opml
 import dev.daisy.core.Store
+import dev.daisy.core.Sync
 import kotlinx.coroutines.runBlocking
 import java.io.File
 
@@ -187,6 +189,81 @@ object Main {
                 println("added ${feed.title} ($id) with ${parsed.items.size} items")
             }
 
+            "sync" -> {
+                // arg is an optional feed id: `sync` refreshes everything,
+                // `sync 3` refreshes one feed. Useful when one feed is broken
+                // and you do not want to wait on the rest.
+                val only = arg?.toLongOrNull()
+                val feeds = store.loadFeeds()
+                if (feeds.isEmpty()) {
+                    println("(no feeds -- add one first)")
+                    return@runBlocking
+                }
+                val targets = if (only == null) feeds else feeds.filter { it.id == only }
+                if (targets.isEmpty()) {
+                    println("no feed with id $only")
+                    return@runBlocking
+                }
+
+                val now = System.currentTimeMillis()
+                val outcomes = ArrayList<Sync.Outcome>(targets.size)
+
+                for (feed in targets) {
+                    println("  ... ${feed.title}")
+                    when (val r = fetcher.get(feed.url)) {
+                        is FetchResult.Failed ->
+                            outcomes.add(Sync.Outcome.Failed(feed.id, r.detail()))
+
+                        is FetchResult.Ok -> {
+                            val parsed = FeedParser.parse(r.body, r.finalUrl)
+                            if (parsed !is FeedParser.Result.Ok) {
+                                outcomes.add(Sync.Outcome.Failed(feed.id, "parse: ${parsed.reason}"))
+                            } else {
+                                val incoming = parsed.items.map { inc ->
+                                    IncomingItem(
+                                        guid = inc.guid,
+                                        title = inc.title,
+                                        link = inc.link,
+                                        summary = inc.summary,
+                                        imageUrl = inc.imageUrl,
+                                        published = inc.published,
+                                    )
+                                }
+                                val out = Sync.apply(
+                                    feedId = feed.id,
+                                    title = parsed.title,
+                                    existing = store.loadItems(feed.id),
+                                    incoming = incoming,
+                                    now = now,
+                                )
+                                store.saveItems(feed.id, out.items)
+                                outcomes.add(out)
+                            }
+                        }
+                    }
+                }
+
+                // lastFetched advances for every ATTEMPTED feed, including
+                // failed ones: it records when we last tried, not when we last
+                // succeeded. See Sync.stamp.
+                val attempted = outcomes.mapNotNull {
+                    when (it) {
+                        is Sync.Outcome.Updated -> it.feedId
+                        is Sync.Outcome.Failed -> it.feedId
+                    }
+                }.toSet()
+                store.saveFeeds(
+                    feeds.map { if (it.id in attempted) it.copy(lastFetched = Sync.stamp(now)) else it },
+                )
+
+                val inserted = Sync.totalInserted(outcomes)
+                println("$inserted new across ${targets.size} feed${if (targets.size == 1) "" else "s"}")
+                for (f in Sync.failures(outcomes)) {
+                    val name = feeds.firstOrNull { it.id == f.feedId }?.title ?: "feed ${f.feedId}"
+                    println("  FAILED  $name  ${f.reason}")
+                }
+            }
+
             "feeds" -> {
                 val feeds = store.loadFeeds()
                 if (feeds.isEmpty()) println("(no feeds)")
@@ -230,6 +307,7 @@ object Main {
               discover <url>   find the feed for any url
               fetch <url>      fetch and parse a feed url
               add <url>        discover and store a feed
+              sync [id]        refresh stored feeds (all, or one by id)
               feeds            the stored feed list
               list             stored items, newest first
               export [file]    write OPML (default daisy.opml)

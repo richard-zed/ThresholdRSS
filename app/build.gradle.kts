@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -29,6 +30,18 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    buildFeatures {
+        compose = true
+    }
+
+    // Keep the manifest's locale filters and the Compose runtime honest about
+    // how large the app is allowed to get.
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
 }
 
 dependencies {
@@ -48,4 +61,19 @@ dependencies {
     // Plain-JVM artifact: the -android one above carries an Android runtime
     // dependency and will not resolve on the unit-test classpath.
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+
+    // Compose. The BOM pins every artifact to one tested set, so the versions
+    // below stay absent on purpose -- bumping one requires bumping the BOM.
+    val composeBom = platform("androidx.compose:compose-bom:2024.09.03")
+    implementation(composeBom)
+    androidTestImplementation(composeBom)
+
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.activity:activity-compose:1.9.2")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
+    implementation("androidx.core:core-ktx:1.13.1")
 }

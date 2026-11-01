@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Three stacked feed rows: a list, not a logo. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,38h44v6h-44z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,51h32v6h-32z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,64h38v6h-38z" />
+</vector>
