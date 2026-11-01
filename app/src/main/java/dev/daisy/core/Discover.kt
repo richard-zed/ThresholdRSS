@@ -104,8 +104,9 @@ object UrlCandidates {
         youtubeCandidates(trimmed).forEach { add(it, Candidate.Kind.PATTERN_RULE) }
 
         if (siteHandlesDiscovery) {
-            // The page itself, to read <link rel=alternate> and the Link header.
-            add(trimmed, Candidate.Kind.DISCOVERY_PAGE)
+            // No separate discovery-page candidate: the as-given url is already
+            // that fetch. If it returns HTML we hold the body, so reading
+            // <link rel=alternate> off it costs nothing extra.
             val base = origin(trimmed)
             if (base != null) {
                 for (p in CONVENTIONAL_PATHS) add(base + p, Candidate.Kind.CONVENTIONAL_PATH)
@@ -197,8 +198,6 @@ data class Candidate(val url: String, val kind: Kind) {
         SUFFIX_RULE,
         /** Derived from a known site pattern. */
         PATTERN_RULE,
-        /** The site's own page, fetched to read its advertised feed. */
-        DISCOVERY_PAGE,
         /** A guessed conventional path. */
         CONVENTIONAL_PATH,
     }

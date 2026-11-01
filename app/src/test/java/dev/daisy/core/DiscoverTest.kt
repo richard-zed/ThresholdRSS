@@ -21,13 +21,30 @@ class DiscoverTest {
     }
 
     @Test
-    fun `zero-cost suffix rules beat any rule that costs a fetch`() {
+    fun `zero-cost suffix rules beat guessed paths`() {
         val list = urls("https://mastodon.social/@someone")
-        // .rss costs no extra request, so it must precede the discovery page
-        // even though discovery is the more "general purpose" route.
+        // .rss costs no extra request, so it must precede anything speculative.
+        // The typed url itself leads (index 0) -- it is the as-given attempt.
         val suffixIdx = list.indexOf("https://mastodon.social/@someone.rss")
-        val pageIdx = list.indexOf("https://mastodon.social/@someone")
-        assertTrue(suffixIdx in 0 until pageIdx)
+        val pathIdx = list.indexOf("https://mastodon.social/feed")
+        assertTrue("suffix rule should be present", suffixIdx > 0)
+        assertTrue("suffix rule should precede guessed paths", suffixIdx < pathIdx)
+    }
+
+    @Test
+    fun `the discovery page and the as-given url are one candidate, not two`() {
+        // Both roles are served by a single GET: fetch the url, and if the body
+        // is HTML we already hold it for the link scan. Two entries with the
+        // same url would be two requests for one answer.
+        val list = urls("https://example.com")
+        assertEquals(1, list.count { it == "https://example.com" })
+    }
+
+    @Test
+    fun `the as-given url is first so a direct feed link costs one request`() {
+        val list = UrlCandidates.forInput("https://example.com/feed.xml")
+        assertEquals(Candidate.Kind.AS_GIVEN, list.first().kind)
+        assertEquals("https://example.com/feed.xml", list.first().url)
     }
 
     @Test
