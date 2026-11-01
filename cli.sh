@@ -9,13 +9,26 @@
 # reopened in an editor. Sets OUT_DIR to override.
 set -e
 
-# kotlinc 2.x ships a native Jansi for console colour. Termux cannot load it
-# (it wants glibc) and the refusal prints a UnsatisfiedLinkError stack before
-# any of our output. TERM=dumb does NOT suppress this: Jansi probes its native
-# library at class-init, before it ever consults TERM, so the export was inert.
-# -Djansi.passthrough=true is the switch that actually skips the native load.
-export TERM=dumb
-JANSI=-Djansi.passthrough=true
+# kotlinc 2.x ships a native Jansi for console colour, built against glibc.
+# Termux cannot dlopen it, and the refusal prints an UnsatisfiedLinkError stack
+# before any of our output. The error is SPURIOUS -- compilation succeeds either
+# way -- but it is noise on every single invocation.
+#
+# Three switches were tried. Only the third works:
+#   TERM=dumb              -- inert. Jansi loads its native lib at class-init,
+#                             long before anything reads TERM.
+#   -Djansi.passthrough    -- inert. Jansi's static initialiser calls
+#                             LibraryLoader.loadLibrary unconditionally; the
+#                             property is consulted AFTER the load is attempted,
+#                             so it can only change what happens on success.
+#   -Dlibrary.jansi.path   -- WORKS. Points Jansi at Termux's own libjansi
+#                             build, so the bundled glibc one is never unpacked.
+# It only works once `pkg install libjansi` has run; the path is checked below
+# so a fresh machine gets a clear message instead of the same stack back.
+JANSI=""
+if [ -f "$PREFIX/lib/jansi/libjansi.so" ]; then
+    JANSI="-Dlibrary.jansi.path=$PREFIX/lib/jansi"
+fi
 
 # Where daisy.jar lands. Defaults to the project's Android tree; the build
 # product is separate from the source tree so ./cli.sh and ./build.sh never
@@ -50,11 +63,16 @@ rm -rf out-cli
 mkdir -p "$OUT"
 # kotlinc is a java launcher underneath, so JANSI has to reach it too -- that is
 # where the UnsatisfiedLinkError stack is actually printed.
+# JANSI is empty when libjansi is not installed, and `-J` with nothing after it
+# makes kotlinc fail on an unknown option, so the flag is only passed when set.
+JFLAG=()
+[ -n "$JANSI" ] && JFLAG=("-J$JANSI")
+
 kotlinc \
     "$CORE"/{Model,Identity,Merge,DayBuckets,Discover,Fetch,Discoverer,YoutubeChannel,FeedParse,Dates,Json,Store,Opml,HttpFetcher}.kt \
     "$CLI"/Main.kt \
     -classpath "$CP_CORO" \
-    -J$JANSI \
+    "${JFLAG[@]}" \
     -d out-cli
 
 # A manifest is a text file ending in a newline. Built with a here-doc rather
