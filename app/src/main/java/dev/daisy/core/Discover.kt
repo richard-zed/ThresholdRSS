@@ -249,5 +249,9 @@ data class Candidate(val url: String, val kind: Kind) {
         PATTERN_RULE,
         /** A guessed conventional path. */
         CONVENTIONAL_PATH,
+        /** Declared by the page itself via <link rel=alternate> or Link:. */
+        ADVERTISED,
+        /** A url that resolved this feed on a previous attempt. Tried first. */
+        REMEMBERED,
     }
 }

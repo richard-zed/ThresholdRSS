@@ -37,6 +37,15 @@ dependencies {
     // fallback if the toolchain in Termux is older.
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
 
+    // Discoverer.discover is a suspend function, so tests need runBlocking.
+    // core publishes no Flow or Dispatchers, so this stays an implementation
+    // detail rather than an API commitment.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.hamcrest:hamcrest-core:1.3")
+
+    // Plain-JVM artifact: the -android one above carries an Android runtime
+    // dependency and will not resolve on the unit-test classpath.
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
 }
