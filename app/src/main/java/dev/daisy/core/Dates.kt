@@ -154,6 +154,7 @@ object Dates {
         val mp = (m + 9) % 12
         val doy = (153 * mp + 2) / 5 + d - 1
         val doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
-        return (era * 146097L + doe - 719468L).toLong()
+        // era * 146097L already widens to Long, so no conversion is needed.
+        return era * 146097L + doe - 719468L
     }
 }

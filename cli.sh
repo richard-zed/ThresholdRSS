@@ -4,8 +4,20 @@
 #
 #   ./cli.sh discover https://www.youtube.com/@someone
 #
-# The jar is daisy.jar in this directory; args pass straight through.
+# The jar is written to $OUT, which defaults to ~/Android/Projects/daisy -- the
+# same tree the project lives in on the phone, so a built jar survives being
+# reopened in an editor. Sets OUT_DIR to override.
 set -e
+
+# kotlinc 2.x ships a native Jansi for console colour. Termux cannot load it
+# (it wants glibc) and the refusal prints a UnsatisfiedLinkError stack before
+# any of our output. TERM=dumb tells Jansi not to try. Harmless either way.
+export TERM=dumb
+
+# Where daisy.jar lands. Defaults to the project's Android tree; the build
+# product is separate from the source tree so ./cli.sh and ./build.sh never
+# leave junk in the repo.
+OUT=${OUT_DIR:-"$HOME/Android/Projects/daisy"}
 
 CORE=app/src/main/java/dev/daisy/core
 CLI=app/src/main/java/dev/daisy/cli
@@ -32,15 +44,24 @@ fi
 # Everything except the Android-only pieces. OkHttpFetcher needs OkHttp, which
 # is an Android dependency; HttpFetcher is the JDK one the CLI uses instead.
 rm -rf out-cli
+mkdir -p "$OUT"
 kotlinc \
     "$CORE"/{Model,Identity,Merge,DayBuckets,Discover,Fetch,Discoverer,YoutubeChannel,FeedParse,Dates,Json,Store,Opml,HttpFetcher}.kt \
     "$CLI"/Main.kt \
     -classpath "$CP_CORO" \
     -d out-cli
 
-printf 'Main-Class: dev.daisy.cli.Main\n' > /tmp/manifest.txt
-jar cfm daisy.jar /tmp/manifest.txt -C out-cli .
+# A manifest is a text file ending in a newline. Built with a here-doc rather
+# than printf so the escape cannot be swallowed: a literal backslash-n leaves
+# "Main-Class" unterminated and jar reports no main manifest attribute.
+cat > daisy.manifest <<'MANIFEST'
+Main-Class: dev.daisy.cli.Main
+MANIFEST
+jar cfm "$OUT/daisy.jar" daisy.manifest -C out-cli .
+rm -f daisy.manifest
+
+echo "wrote $OUT/daisy.jar"
 
 # The CLI needs the coroutines jar and the stdlib at runtime; a fat jar would be
 # tidier but would need the Android build to agree on its contents.
-exec java -cp "daisy.jar:$CP_CORO:$STDLIB" dev.daisy.cli.Main "$@"
+exec java -cp "$OUT/daisy.jar:$CP_CORO:$STDLIB" dev.daisy.cli.Main "$@"
