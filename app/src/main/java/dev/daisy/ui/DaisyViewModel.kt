@@ -21,13 +21,17 @@ import dev.daisy.core.Sync
 import dev.daisy.core.TimeZoneInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Calendar
@@ -191,6 +195,25 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * refreshOne, with the failure guard attached.
+     *
+     * A feed that throws must not take the whole sync down with it. Without
+     * this, one pathological body kills the coroutine and `syncing` stays true
+     * forever because the code that clears it never runs -- the app then looks
+     * dead and refuses every later refresh.
+     *
+     * Pulled out of the loop so the concurrent and single-feed paths cannot
+     * drift into handling failure differently.
+     */
+    private suspend fun safeRefresh(feed: Feed, now: Long): Sync.Outcome = try {
+        refreshOne(feed, now)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        Sync.Outcome.Failed(feed.id, e.message ?: e.javaClass.simpleName)
+    }
+
     private suspend fun runSync(feeds: List<Feed>) {
         val now = System.currentTimeMillis()
         val failures = LinkedHashMap<Long, String>()
@@ -202,19 +225,57 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
         // otherwise wins and silently discards the others' lastFetched.
         var working = feeds
 
-        for (feed in feeds) {
-            // A feed that throws must not take the whole sync down with it.
-            // Without this, one pathological body kills the coroutine, and
-            // `syncing` stays true forever because the code that clears it
-            // never runs -- the app then looks dead and refuses every
-            // later refresh.
-            val outcome = try {
-                refreshOne(feed, now)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                Sync.Outcome.Failed(feed.id, e.message ?: e.javaClass.simpleName)
+        // Fetch every feed CONCURRENTLY, then fold the results in list order.
+        //
+        // This loop used to be strictly sequential, so eleven feeds meant
+        // eleven round-trips end to end: at ~300-800ms per request that is
+        // several seconds of doing nothing but waiting, and adding a feed made
+        // a refresh slower in a way that felt like the app degrading. The time
+        // is almost entirely network latency, not CPU, so overlapping the
+        // requests is nearly free.
+        //
+        // refreshOne is safe to run in parallel: it writes only its own feed's
+        // items file and returns an outcome rather than mutating anything
+        // shared. All accumulation happens below, single-threaded, in list
+        // order -- so `working`, `failures` and `inserted` need no lock and
+        // the resulting state does not depend on which request finished first.
+        //
+        // Every child is guarded by safeRefresh, which is what keeps one feed
+        // clearing its siblings: a throw inside a child becomes a Failed
+        // outcome, not a cancelled parent. That is the same promise the
+        // sequential loop made -- one pathological body cannot take the sync
+        // down or leave `syncing` stuck true. A SupervisorJob would be the
+        // usual way to express this, but it is redundant here because nothing
+        // is allowed to throw in the first place; the guard is also what makes
+        // the sequential and concurrent paths behave identically.
+        val results: List<Pair<Feed, Sync.Outcome>> =
+            if (feeds.size <= 1) {
+                // Nothing to overlap, and the single-feed path is the one a
+                // filtered refresh takes.
+                feeds.map { feed -> feed to safeRefresh(feed, now) }
+            } else {
+                coroutineScope {
+                    // Six in flight, however long the list is, so a large
+                    // subscription set cannot open dozens of sockets at once.
+                    //
+                    // No dispatcher on async(): refreshOne already hops to
+                    // Dispatchers.IO for the fetch and for the disk work, so
+                    // dispatching here as well would hop twice and hold the
+                    // permit across both. Starting on the caller's dispatcher
+                    // keeps the permit covering exactly the work it is meant
+                    // to bound.
+                    //
+                    // OkHttp's own dispatcher caps at 5 requests per host, so
+                    // this is the binding limit for a list of feeds on
+                    // different hosts, which is the normal case.
+                    val gate = Semaphore(minOf(feeds.size, MAX_PARALLEL_FETCHES))
+                    feeds.map { feed ->
+                        async { gate.withPermit { feed to safeRefresh(feed, now) } }
+                    }.map { it.await() }
+                }
             }
+
+        for ((feed, outcome) in results) {
             when (outcome) {
                 is Sync.Outcome.Updated -> {
                     working = working.map {
@@ -292,6 +353,20 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** One feed: fetch, parse, merge. Free of UI concerns. */
+    private companion object {
+        /**
+         * How many feeds may be fetching at once.
+         *
+         * Six is enough to hide most of the latency on a normal subscription
+         * list while keeping the open-connection count modest -- phone radios
+         * do not benefit from eleven sockets competing, and a burst of that
+         * many handshakes is what makes a refresh feel like it stalled rather
+         * than started. The value is a ceiling on sockets, not on feeds: a
+         * list of fifty still only ever has six in flight.
+         */
+        const val MAX_PARALLEL_FETCHES = 6
+    }
+
     private suspend fun refreshOne(feed: Feed, now: Long): Sync.Outcome {
         val fetched = withContext(Dispatchers.IO) { fetcher.get(feed.url) }
         if (fetched is FetchResult.Failed) {
