@@ -1,3 +1,14 @@
 lib/
 out/
 *.jar
+
+# Gradle
+.gradle/
+build/
+local.properties
+
+# R8 output. `mapping.txt` is what deobfuscates a release stack trace, so it
+# must be KEPT as a build artifact (Play accepts it for upload) but never
+# committed -- it is regenerated per build and goes stale immediately.
+app/build/
+*.hprof

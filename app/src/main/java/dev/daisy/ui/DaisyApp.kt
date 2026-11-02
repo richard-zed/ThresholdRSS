@@ -50,6 +50,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SwipeToDismissBox
@@ -285,7 +286,7 @@ private fun FeedListScreen(
     val oneFeed = screen as? Screen.OneFeed
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { ThemedSnackbarHost(snackbar) },
         bottomBar = {
             DestinationBar(
                 current = screen,
@@ -431,7 +432,7 @@ private fun FeedPickerScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { ThemedSnackbarHost(snackbar) },
         // The same bar as every other top-level screen. "Back" was a row of
         // text that only this screen had; the bar's Home tab does the same
         // job in the place the user already looks for it.
@@ -885,7 +886,7 @@ private fun AddFeedScreen(
     val canSubmit = text.isNotBlank() && !busy
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { ThemedSnackbarHost(snackbar) },
         bottomBar = {
             DestinationBar(
                 current = Screen.Add,
@@ -1454,4 +1455,28 @@ private fun startOfToday(): Long {
     cal.set(java.util.Calendar.SECOND, 0)
     cal.set(java.util.Calendar.MILLISECOND, 0)
     return cal.timeInMillis
+}
+
+/**
+ * Snackbar painted from the theme's own surface rather than M3's
+ * `inverseSurface`.
+ *
+ * Stock M3 inverts: in a dark theme `inverseSurface` is near-white, so the
+ * bar arrives as a bright slab that looks unrelated to the page behind it.
+ * Using `surfaceContainerHighest` + `onSurface` keeps the message on a
+ * themed panel and still separates it from the background by tonal step.
+ *
+ * `actionColor` is left to `primary` so a snackbar action stays legible on the
+ * themed container -- the M3 default assumes the inverse background.
+ */
+@Composable
+private fun ThemedSnackbarHost(hostState: SnackbarHostState) {
+    SnackbarHost(hostState) { data ->
+        Snackbar(
+            snackbarData = data,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            actionColor = MaterialTheme.colorScheme.primary,
+        )
+    }
 }

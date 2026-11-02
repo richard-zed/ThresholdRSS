@@ -19,7 +19,18 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 full mode is AGP's default. `proguard-android-optimize.txt`
+            // turns on the optimisation passes as well as shrinking -- the
+            // plain `proguard-android.txt` variant only strips dead code.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            // Debuggable release builds are refused by the Play uploader and
+            // make R8 skip some optimisations, so this stays explicit.
+            isDebuggable = false
         }
     }
 
