@@ -99,37 +99,38 @@
        cx="54"
        cy="54"
        r="54" />
-    <circle
-       style="fill:#e8e833;fill-opacity:1;stroke:none;stroke-width:1.215;stroke-dasharray:none;stroke-opacity:1"
+    <ellipse
+       style="fill:#e8e833;fill-opacity:1;stroke:none;stroke-width:1.2;stroke-dasharray:none;stroke-opacity:1"
        id="path3"
-       cx="31.32"
-       cy="76.68"
-       r="9.7200003" />
+       cx="31.599997"
+       cy="76.400017"
+       rx="9.5999966"
+       ry="9.5999994" />
     <path
-       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.8;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.6667;stroke-dasharray:none;stroke-opacity:1"
        id="path6"
        sodipodi:type="arc"
-       sodipodi:cx="21.6"
-       sodipodi:cy="86.400002"
-       sodipodi:rx="59.400002"
-       sodipodi:ry="59.400002"
+       sodipodi:cx="22"
+       sodipodi:cy="86.000015"
+       sodipodi:rx="58.666649"
+       sodipodi:ry="58.666664"
        sodipodi:start="4.712389"
        sodipodi:end="0"
        sodipodi:arc-type="arc"
-       d="M 21.6,27 A 59.400002,59.400002 0 0 1 81.000002,86.400002"
+       d="M 22,27.333351 A 58.666649,58.666664 0 0 1 80.666649,86.000015"
        sodipodi:open="true" />
     <path
-       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.8;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.6667;stroke-dasharray:none;stroke-opacity:1"
        id="path6-3"
        sodipodi:type="arc"
-       sodipodi:cx="21.6"
-       sodipodi:cy="86.400002"
-       sodipodi:rx="37.799999"
-       sodipodi:ry="37.799999"
+       sodipodi:cx="22"
+       sodipodi:cy="86.000015"
+       sodipodi:rx="37.333324"
+       sodipodi:ry="37.333332"
        sodipodi:start="4.712389"
        sodipodi:end="0"
        sodipodi:arc-type="arc"
-       d="m 21.6,48.600002 a 37.799999,37.799999 0 0 1 37.8,37.8"
+       d="M 22,48.666683 A 37.333324,37.333332 0 0 1 59.333324,86.000015"
        sodipodi:open="true" />
   </g>
 </svg>
