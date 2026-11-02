@@ -108,7 +108,17 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
     // Every screen above All pops to All. Attempting to leave the app from a
     // sub-screen instead would close it, which is not what a top bar's back
     // arrow does.
-    BackHandler(enabled = screen != Screen.All) { screen = Screen.All }
+    //
+    // The filter has to be cleared with the screen. Every explicit "go home"
+    // button already called selectFeed(null), but back did not -- so backing
+    // out of one feed's view landed on All while the list stayed filtered to
+    // that feed, and tapping Add then confirming a feed left you looking at
+    // the old one. The screen and the filter are two halves of one piece of
+    // navigation state and cannot be changed separately.
+    BackHandler(enabled = screen != Screen.All) {
+        screen = Screen.All
+        vm.selectFeed(null)
+    }
 
     val entry = openEntry
     when {

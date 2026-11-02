@@ -364,30 +364,61 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
         val found = _state.value.discover as? DiscoverState.Found ?: return
 
         viewModelScope.launch {
+            val now = System.currentTimeMillis()
             val added = withContext(Dispatchers.IO) {
                 writeLock.withLock { subscribe(found.feedUrl, found.title) }
             }
             // Fetch it NOW. subscribe() leaves an empty items file, and nothing
             // else fills it until the next sync -- so a newly added feed showed
             // "No entries" and looked broken until the user refreshed by hand.
-            // That is the whole reason a federated feed appeared to have no
-            // posts when the feed itself was fine.
+            //
+            // One correction after that: refreshOne MERGES but does not save.
+            // The save lives in runSync's loop, which this path never enters, so
+            // calling it and dropping the outcome wrote nothing and the feed
+            // stayed empty no matter how good the feed was. Persist here, under
+            // the same lock, from the outcome refreshOne returns.
+            var firstFailure: String? = null
             if (added != null) {
-                withContext(Dispatchers.IO) {
+                val outcome = withContext(Dispatchers.IO) {
                     try {
-                        refreshOne(added, System.currentTimeMillis())
+                        refreshOne(added, now)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Throwable) {
-                        // A first fetch that fails must not lose the feed: it is
-                        // subscribed, just empty, and the next sync retries.
+                        Sync.Outcome.Failed(added.id, e.message ?: e.javaClass.simpleName)
                     }
+                }
+                when (outcome) {
+                    is Sync.Outcome.Updated -> withContext(Dispatchers.IO) {
+                        writeLock.withLock {
+                            store.saveItems(added.id, outcome.items)
+                            // The title comes from the feed itself, which is
+                            // better than the one discovery guessed from HTML.
+                            if (outcome.title != null) {
+                                store.saveFeeds(
+                                    store.loadFeeds().map {
+                                        if (it.id == added.id) {
+                                            it.copy(title = outcome.title, lastFetched = now)
+                                        } else it
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    // A first fetch that fails must not lose the feed: it is
+                    // subscribed and empty, and the next sync retries. But say
+                    // so, rather than reporting success and showing nothing.
+                    is Sync.Outcome.Failed -> firstFailure = outcome.reason
                 }
             }
             _state.update {
                 it.copy(
                     discover = DiscoverState.Idle,
-                    message = if (added != null) "Added" else "Already subscribed",
+                    message = when {
+                        added == null -> "Already subscribed"
+                        firstFailure != null -> "Added, but fetch failed: $firstFailure"
+                        else -> "Added"
+                    },
                 )
             }
             // Read back inside the lock, like every other write in this class.
@@ -473,6 +504,16 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
      * lock as the writes, so the list published here is the list just written.
      */
     fun removeFeed(feedId: Long) {
+        // Drop it from the published list IMMEDIATELY, before touching disk.
+        // The delete below is synchronous file work plus a full list rewrite,
+        // and waiting for it left the row sitting there through the whole
+        // operation -- the swipe looked like it had not taken. Publishing the
+        // removal first makes the row leave on the next frame; the disk work
+        // then confirms it, and the re-read at the end replaces the guess with
+        // the truth. If the delete fails the next sync puts the feed back.
+        _state.update { st ->
+            st.copy(feeds = st.feeds.filterNot { it.id == feedId })
+        }
         viewModelScope.launch {
             // The re-read happens INSIDE the lock, and the state is published
             // from that read.
