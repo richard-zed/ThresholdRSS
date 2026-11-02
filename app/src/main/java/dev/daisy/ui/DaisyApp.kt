@@ -256,20 +256,20 @@ private fun FeedListScreen(
                 // janky part -- one destination, always present, always in the
                 // same place, reads better and is one fewer special case.
                 BarTab(
-                    label = "Home",
-                    selected = oneFeed == null && screen is Screen.All,
-                    onClick = onShowAll,
-                    modifier = Modifier.weight(1f),
-                ) { tint ->
-                    Icon(Icons.Filled.Home, contentDescription = null, tint = tint)
-                }
-                BarTab(
                     label = "Feeds",
                     selected = oneFeed != null,
                     onClick = onShowFeeds,
                     modifier = Modifier.weight(1f),
                 ) { tint ->
                     Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = tint)
+                }
+                BarTab(
+                    label = "Home",
+                    selected = oneFeed == null && screen is Screen.All,
+                    onClick = onShowAll,
+                    modifier = Modifier.weight(1f),
+                ) { tint ->
+                    Icon(Icons.Filled.Home, contentDescription = null, tint = tint)
                 }
                 BarTab(
                     label = "Add",
@@ -280,14 +280,6 @@ private fun FeedListScreen(
                     Icon(Icons.Filled.Add, contentDescription = null, tint = tint)
                 }
 
-                if (state.syncing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .padding(horizontal = 8.dp)
-                            .size(16.dp),
-                        strokeWidth = 2.dp,
-                    )
-                }
             }
             }
         },
@@ -338,23 +330,24 @@ private fun FeedListScreen(
                 }
 
                 else -> LazyColumn(Modifier.fillMaxSize()) {
-                    itemsIndexed(
-                        state.buckets,
-                        // Index-suffixed ON PURPOSE. A bucket key must be
-                        // unique or the measure pass throws, and a duplicate
-                        // day is a data problem (DayBuckets no longer emits
-                        // one, but a future caller can) -- a stutter in the
-                        // list is survivable, a crash is not. Two headers is a
-                        // visible symptom; the duplicate-key exception is not.
-                        key = { i, b -> "day-${b.dayStart}-$i" },
-                    ) { _, bucket ->
-                        DayHeader(bucket.dayStart)
-                        // Kotlin resolves an unqualified items() inside the
-                        // outer items() block against LazyItemScope, which has
-                        // no such member, so the compiler refuses it rather
-                        // than silently picking one. this@LazyColumn names the
-                        // scope that does have it.
-                        this@LazyColumn.items(
+                    // FLAT list: a header row then its entries, appended into
+                    // one stream. The previous version emitted a DayHeader and
+                    // then called items() INSIDE an itemsIndexed() block.
+                    // Emitting extra composables from an item slot is legal,
+                    // but a nested items() there does not create lazy rows --
+                    // it paints them all into that one slot's composable.
+                    // The result laid out, so it looked plausible, but the
+                    // bucket was a single giant row: recycling broke, and
+                    // entries could not be placed relative to their own
+                    // separator once the list scrolled.
+                    //
+                    // Header keys are index-suffixed so a duplicate dayStart
+                    // is a visible stutter rather than a measure-pass crash.
+                    state.buckets.forEachIndexed { bi, bucket ->
+                        item(key = "day-${bucket.dayStart}-$bi") {
+                            DayHeader(bucket.dayStart)
+                        }
+                        items(
                             bucket.items,
                             // Item.id is only unique within a feed, so the key
                             // has to combine both. A bare id would collide as

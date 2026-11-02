@@ -145,9 +145,22 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
      * articles it already fetched. The feed list is written once at the end,
      * reconciled against whatever is on disk by then.
      */
+    /**
+     * Refresh feeds.
+     *
+     * When a single feed is being viewed, only that feed is fetched. Pressing
+     * the list was doing a full sync, which is wrong in two ways: it hits
+     * every subscription for one screen's worth of content, and a failure on
+     * an unrelated feed reports an error under a list that did not ask for it.
+     * The filter is read here rather than passed in so every caller -- pull,
+     * tab, gesture -- inherits the same rule without remembering it.
+     */
     fun sync() {
         if (_state.value.syncing) return
-        val feeds = _state.value.feeds
+        val filter = _state.value.feedFilterId
+        val feeds = _state.value.feeds.let { all ->
+            if (filter == null) all else all.filter { it.id == filter }
+        }
         if (feeds.isEmpty()) {
             _state.update { it.copy(message = "No feeds yet") }
             return
