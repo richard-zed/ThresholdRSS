@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -464,6 +465,12 @@ private fun FeedPickerScreen(
             val listState = rememberLazyListState()
             var draggingKey by remember { mutableStateOf<String?>(null) }
             var dragOffset by remember { mutableFloatStateOf(0f) }
+            // The dragged row's index at the moment the drag began. The marker
+            // needs to know which way the row is travelling: rows do not
+            // reorder until release, so "above or below this row" has to be
+            // answered against where the row STARTED, not where it sits in a
+            // list that has not moved yet.
+            var dragSrcIndex by remember { mutableIntStateOf(-1) }
             // Index the dragged row would land in if released now. Held here
             // rather than per-row so the DESTINATION row can draw the marker:
             // the row under the finger is the one being moved, so an indicator
@@ -534,17 +541,30 @@ private fun FeedPickerScreen(
                     // runs in DrawScope and is not @Composable, so reading
                     // MaterialTheme inside it does not compile.
                     val markerColor = MaterialTheme.colorScheme.primary
-                    val isLastRow = index == state.feeds.lastIndex
+                    // Which edge of THIS row the gap sits on.
                     //
-                    // target is the FINAL index the held row will occupy, not
-                    // a gap number. Dropping below everything gives the
-                    // last index, whose gap is the bottom of the list -- so the
-                    // last row checks for that case separately, or the line
-                    // would sit above it while the row lands beneath it.
+                    // The direction matters, not just the index. Rows stay in
+                    // their original positions until the release commits the
+                    // move, so the line has to describe the gap in the CURRENT
+                    // layout -- but `target` is the FINAL index. Treating it as
+                    // a plain boundary lit the top edge for a downward move,
+                    // where the row actually lands BELOW that row: the line
+                    // said one slot higher than the drop did.
+                    //
+                    // Down (target > index): the row ends up after the row
+                    // currently at `target`, so the gap is that row's bottom.
+                    // Up (target < index): it ends up before it, so the gap is
+                    // that row's top.
+                    // Landing on itself is no move: no line.
+                    //
+                    // This also covers the end of the list without a special
+                    // case -- target == lastIndex falls out as the last row's
+                    // bottom edge.
                     val gapAtTop: Boolean? = when {
                         draggingKey == null || target == null -> null
-                        !isLastRow && target == index -> true
-                        isLastRow && target == index -> false
+                        target != index -> null
+                        target > dragSrcIndex -> false
+                        target < dragSrcIndex -> true
                         else -> null
                     }
                     // Shift accumulated while dragging, converted back to an
@@ -650,6 +670,7 @@ private fun FeedPickerScreen(
                                     onDragStart = {
                                         draggingKey = key
                                         dragOffset = 0f
+                                        dragSrcIndex = index
                                         dropIndex = index
                                     },
                                     onDragEnd = {
@@ -662,11 +683,13 @@ private fun FeedPickerScreen(
                                         if (target != index) onMoveFeed(index, target)
                                         draggingKey = null
                                         dragOffset = 0f
+                                        dragSrcIndex = -1
                                         dropIndex = null
                                     },
                                     onDragCancel = {
                                         draggingKey = null
                                         dragOffset = 0f
+                                        dragSrcIndex = -1
                                         dropIndex = null
                                     },
                                     onDrag = { change, amount ->
