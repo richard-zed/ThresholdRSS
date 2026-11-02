@@ -430,14 +430,22 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
-        val added = withContext(Dispatchers.IO) {
+        // Read back inside the lock, with the writes it follows -- the same
+        // ordering removeFeed needs, and for the same reason: load() launches,
+        // so calling it here would return before the subscribe writes landed
+        // and the new feeds would not appear until the next load.
+        var added = 0
+        val snapshot = withContext(Dispatchers.IO) {
             writeLock.withLock {
-                entries.count { e -> subscribe(e.url, e.title) }
+                added = entries.count { e -> subscribe(e.url, e.title) }
+                snapshotLocked()
             }
         }
-        load()
         _state.update {
             it.copy(
+                feeds = snapshot.first,
+                buckets = snapshot.second,
+                loading = false,
                 message = when (added) {
                     0 -> "All ${entries.size} already subscribed"
                     1 -> "Added 1 feed"

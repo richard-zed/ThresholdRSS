@@ -76,8 +76,8 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
             onDismissDiscover = vm::dismissDiscover,
             onOpenFeed = { openFeedId = it },
             onRemoveFeed = vm::removeFeed,
-            onImportOpml = vm::importOpml,
-            onExportOpml = vm::exportOpml,
+            onImportOpml = { body -> vm.importOpml(body) },
+            onExportOpml = { vm.exportOpml() },
         )
     }
 }
@@ -91,8 +91,8 @@ private fun FeedListScreen(
     onDismissDiscover: () -> Unit,
     onOpenFeed: (Long) -> Unit,
     onRemoveFeed: (Long) -> Unit,
-    onImportOpml: (String) -> Unit,
-    onExportOpml: (suspend () -> String),
+    onImportOpml: suspend (String) -> Unit,
+    onExportOpml: suspend () -> String,
 ) {
     var adding by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
