@@ -13,6 +13,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.zIndex
+import androidx.compose.runtime.mutableFloatStateOf
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -29,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -191,6 +200,7 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
                 screen = Screen.OneFeed(feedId)
             },
             onRemoveFeed = vm::removeFeed,
+            onMoveFeed = vm::moveFeed,
             onExportOpml = { vm.exportOpml() },
             onShowAdd = { screen = Screen.Add },
         )
@@ -392,6 +402,7 @@ private fun FeedPickerScreen(
     onShowAdd: () -> Unit,
     onOpenFeed: (Long) -> Unit,
     onRemoveFeed: (Long) -> Unit,
+    onMoveFeed: (Int, Int) -> Unit,
     onExportOpml: suspend () -> String,
 ) {
     // No top bar, matching the entry list. These three screens are peers, so
@@ -441,11 +452,45 @@ private fun FeedPickerScreen(
             // in the same Column, and a child asking for the whole height
             // leaves it nothing -- the button would be pushed off the bottom
             // edge exactly when there are feeds to export.
-            LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-                items(state.feeds, key = { "feed-${it.id}" }) { feed ->
+            // Reordering. Long-press starts a drag; the row follows the finger
+            // vertically and the list reorders when it crosses a row boundary.
+            //
+            // The index bookkeeping is done here rather than with a library
+            // because the rows are simultaneously swipe-to-dismiss targets, so
+            // the drag has to stay strictly vertical: a horizontal drag must
+            // fall through to SwipeToDismissBox untouched, which is why only
+            // dy is consumed.
+            val listState = rememberLazyListState()
+            var draggingKey by remember { mutableStateOf<String?>(null) }
+            var dragOffset by remember { mutableFloatStateOf(0f) }
+
+            fun rowHeightPx(): Float {
+                val info = listState.layoutInfo
+                return info.visibleItemsInfo.firstOrNull()?.size?.toFloat()
+                    ?: info.visibleItemsInfo.lastOrNull()?.size?.toFloat()
+                    ?: 0f
+            }
+
+            LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth()) {
+                itemsIndexed(state.feeds, key = { _, f -> "feed-${f.id}" }) { index, feed ->
                     val scope = rememberCoroutineScope()
+                    val key = "feed-${feed.id}"
+                    val isDragging = draggingKey == key
+                    // Shift accumulated while dragging, converted back to an
+                    // index step. Kept in a plain float rather than snapping to
+                    // an integer so a drag shorter than a row still shows
+                    // movement instead of sitting dead until it crosses over.
+                    val nudge = if (isDragging) dragOffset else 0f
                     var committed by remember(feed.id) { mutableStateOf(false) }
                     val dismissState = rememberSwipeToDismissBoxState(
+                        // Deleting a feed is not undoable from here, so the
+                        // swipe has to be a decision rather than a gesture
+                        // that happened. The default threshold fires far too
+                        // early on a phone -- a short flick across the row
+                        // commits it -- so this demands a swipe most of the
+                        // way across, and only counts distance toward the
+                        // dismiss direction, which is end-to-start (left).
+                        positionalThreshold = { totalDistance -> totalDistance * 0.6f },
                         // Destructive, so a swipe alone does not commit it:
                         // returning TRUE tells the box the row really is
                         // dismissed, which parks it off-screen and lets it play
@@ -481,7 +526,54 @@ private fun FeedPickerScreen(
                         // modifier: it replaced animateItemPlacement, which was
                         // deprecated and then removed, so the old name no longer
                         // resolves at all rather than merely warning.
-                        modifier = Modifier.animateItem(),
+                        // zIndex lifts the dragged row over its neighbours so
+                        // the row it slides across does not paint on top of it.
+                        modifier = Modifier
+                            .animateItem()
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .offset { IntOffset(0, nudge.roundToInt()) }
+                            // Keyed on index as well as id: the lambda closes
+                            // over `index`, and after a reorder every row's
+                            // index changes while its id does not. Keying on
+                            // the id alone leaves the captured index stale, so
+                            // a second drag would move the row from where it
+                            // used to be.
+                            .pointerInput(key, index) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        draggingKey = key
+                                        dragOffset = 0f
+                                    },
+                                    onDragEnd = {
+                                        // Commit on release rather than mid-drag:
+                                        // reordering on every crossed boundary
+                                        // rewrites meta.json dozens of times for
+                                        // one gesture, and each write publishes a
+                                        // new list, which fights the drag itself.
+                                        val h = rowHeightPx()
+                                        if (h > 0f) {
+                                            val step = (dragOffset / h).roundToInt()
+                                            val target = (index + step)
+                                                .coerceIn(0, state.feeds.lastIndex)
+                                            if (target != index) onMoveFeed(index, target)
+                                        }
+                                        draggingKey = null
+                                        dragOffset = 0f
+                                    },
+                                    onDragCancel = {
+                                        draggingKey = null
+                                        dragOffset = 0f
+                                    },
+                                    onDrag = { change, amount ->
+                                        // Only dy is consumed. Consuming the
+                                        // horizontal delta would starve
+                                        // SwipeToDismissBox, and the two
+                                        // gestures would fight over every drag.
+                                        change.consume()
+                                        dragOffset += amount.y
+                                    },
+                                )
+                            },
                         enableDismissFromStartToEnd = false,
                         backgroundContent = {
                             Box(
@@ -540,6 +632,21 @@ private fun FeedPickerScreen(
                                             .clip(CircleShape),
                                     )
                                 }
+                            },
+                            // A visible handle, because the drag is otherwise
+                            // undiscoverable: a long-press that reorders
+                            // leaves no trace on screen, and nothing about a
+                            // feed row suggests it can be held. The icon is
+                            // decorative -- the gesture is bound to the whole
+                            // row, so the handle does not need to be a target
+                            // and should not steal the tap that opens a feed.
+                            trailingContent = {
+                                Icon(
+                                    imageVector = Icons.Default.Menu,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp),
+                                )
                             },
                             // The row's own background, so the red swipe
                             // background does not show through while idle.

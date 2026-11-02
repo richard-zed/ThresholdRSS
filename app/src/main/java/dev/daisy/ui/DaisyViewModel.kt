@@ -543,6 +543,37 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Reorders the feed list, moving the feed at [from] to [to].
+     *
+     * The list is the stored order -- there is no sort key -- so this is a
+     * plain rewrite of the collection and the new order survives a restart
+     * for free. Same lock as [removeFeed]: it is a read-modify-write of
+     * meta.json, and an unlocked read here would resurrect a removed feed or
+     * drop a concurrent subscribe.
+     *
+     * Guarded rather than trusting the caller: a lazy list can send an index
+     * that no longer exists after an unrelated removal, and the shift below
+     * would silently move the wrong feed.
+     */
+    fun moveFeed(from: Int, to: Int) {
+        if (from == to) return
+        viewModelScope.launch {
+            val snapshot = withContext(Dispatchers.IO) {
+                writeLock.withLock {
+                    val feeds = store.loadFeeds().toMutableList()
+                    if (from !in feeds.indices || to !in feeds.indices) return@withLock null
+                    feeds.add(to, feeds.removeAt(from))
+                    store.saveFeeds(feeds)
+                    snapshotLocked()
+                }
+            } ?: return@launch
+            _state.update {
+                it.copy(feeds = snapshot.first, buckets = snapshot.second, loading = false)
+            }
+        }
+    }
+
+    /**
      * Feeds plus day buckets, read from disk.
      *
      * MUST be called under [writeLock] by any writer: it is the read half of a

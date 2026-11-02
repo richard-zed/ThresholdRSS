@@ -98,6 +98,20 @@ object Html {
             order.add(c)
         }
 
+        /**
+         * Removes a child from BOTH the child list and [order].
+         *
+         * Dropping it from [children] alone is not enough: [order] holds the
+         * same objects, and anything re-emitting the node walks `order`, so a
+         * half-removal leaves the child in the output while every other
+         * traversal believes it is gone. Removal lives here so the two lists
+         * cannot drift apart at a call site.
+         */
+        fun removeChild(c: Node) {
+            children.remove(c)
+            order.remove(c)
+        }
+
         /** All text under this node, whitespace collapsed. */
         fun innerText(): String {
             val sb = StringBuilder()

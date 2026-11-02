@@ -141,6 +141,14 @@ object Readability {
         val title = documentTitle(roots) ?: headingIn(best)
         val byline = bylineIn(best)
 
+        // The reader prints the title itself, above the body. When the page's
+        // own <h1> survives into the fragment the article opens with the
+        // headline twice, and on Phoronix the author div sits between the two
+        // halves, so the duplicate reads as a second headline separated by
+        // gibberish. Drop the leading heading once it has been promoted.
+        dropLeadingHeading(best, title)
+        dropBylineNode(best)
+
         val html = serialise(best, pageUrl)
         if (html.isEmpty()) return null
 
@@ -219,6 +227,63 @@ object Readability {
         }
         return null
     }
+
+    /**
+     * Removes the opening heading when it repeats the title the reader is
+     * about to print.
+     *
+     * Only the first heading is considered, and only if it appears before any
+     * real prose -- a heading further down is a section header, not a title.
+     */
+    private fun dropLeadingHeading(root: Html.Node, title: String?) {
+        if (title == null) return
+        val want = normalise(title)
+        if (want.isEmpty()) return
+
+        val limit = minOf(root.children.size, 3)
+        for (i in 0 until limit) {
+            val c = root.children[i]
+            if (c.name !in HEADING_TAGS) return
+            if (normalise(c.innerText()) != want) return
+            root.removeChild(c)
+            return
+        }
+    }
+
+    /**
+     * Removes the page's own byline block from the body.
+     *
+     * The reader prints the byline separately, so leaving the block in place
+     * renders it twice -- and because these are usually divs of running text
+     * with links ("Written by NAME in CATEGORY on DATE"), the leftover reads
+     * as a stray line under the headline rather than as an obvious duplicate.
+     *
+     * Matched on class, not on the byline text: by the time we know the name
+     * the text is flattened and the node it came from is no longer locatable.
+     */
+    private fun dropBylineNode(root: Html.Node) {
+        val doomed = ArrayList<Html.Node>()
+        fun walk(n: Html.Node, depth: Int) {
+            if (depth > 4) return
+            for (c in n.children) {
+                val cls = c.attrs["class"].orEmpty()
+                if (c.name in BLOCK_TAGS && BYLINE_CLASS.containsMatchIn(cls)) {
+                    doomed.add(c)
+                } else {
+                    walk(c, depth + 1)
+                }
+            }
+        }
+        walk(root, 0)
+        for (d in doomed) d.parent?.removeChild(d)
+    }
+
+    private val HEADING_TAGS = setOf("h1", "h2")
+    private val BLOCK_TAGS = setOf("div", "p", "span", "section", "header", "footer")
+    private val BYLINE_CLASS = Regex("(?i)\\b(author|byline|posted-by)\\b")
+
+    private fun normalise(s: String): String =
+        s.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
 
     private fun headingIn(root: Html.Node): String? {
         fun find(n: Html.Node, depth: Int): Html.Node? {
