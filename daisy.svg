@@ -31,9 +31,9 @@
      inkscape:clip-to-page="false"
      showguides="true"
      showgrid="false"
-     inkscape:zoom="4.6220684"
-     inkscape:cx="92.274705"
-     inkscape:cy="35.15742"
+     inkscape:zoom="7.4351852"
+     inkscape:cx="54"
+     inkscape:cy="54"
      inkscape:window-width="1912"
      inkscape:window-height="1012"
      inkscape:window-x="0"
@@ -99,38 +99,37 @@
        cx="54"
        cy="54"
        r="54" />
-    <ellipse
-       style="fill:#e8e833;fill-opacity:1;stroke:none;stroke-width:1.25;stroke-dasharray:none;stroke-opacity:1"
+    <circle
+       style="fill:#e8e833;fill-opacity:1;stroke:none;stroke-width:2.2;stroke-dasharray:none;stroke-opacity:1"
        id="path3"
-       cx="32"
-       cy="76"
-       rx="10"
-       ry="10.000003" />
+       cx="33"
+       cy="75"
+       r="11" />
     <path
-       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.6667;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.6584;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
        id="path6"
        sodipodi:type="arc"
-       sodipodi:cx="22"
-       sodipodi:cy="86.000015"
-       sodipodi:rx="58.666649"
-       sodipodi:ry="58.666664"
+       sodipodi:cx="27.329201"
+       sodipodi:cy="80.670799"
+       sodipodi:rx="53.341534"
+       sodipodi:ry="53.341599"
        sodipodi:start="4.712389"
        sodipodi:end="0"
        sodipodi:arc-type="arc"
-       d="M 22,27.333351 A 58.666649,58.666664 0 0 1 80.666649,86.000015"
+       d="M 27.329201,27.329201 A 53.341534,53.341599 0 0 1 80.670734,80.670799"
        sodipodi:open="true" />
     <path
-       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.5;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.6056;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
        id="path6-3"
        sodipodi:type="arc"
-       sodipodi:cx="22"
-       sodipodi:cy="86.000008"
-       sodipodi:rx="36.749985"
-       sodipodi:ry="36.749992"
+       sodipodi:cx="27.302799"
+       sodipodi:cy="80.697189"
+       sodipodi:rx="33.394344"
+       sodipodi:ry="33.39439"
        sodipodi:start="4.712389"
        sodipodi:end="0"
        sodipodi:arc-type="arc"
-       d="M 22,49.250015 A 36.749985,36.749992 0 0 1 58.749985,86.000008"
+       d="m 27.302799,47.302799 a 33.394344,33.39439 0 0 1 33.394345,33.39439"
        sodipodi:open="true" />
   </g>
 </svg>

@@ -4,11 +4,12 @@
     on every axis, so the mask cuts inside it and there is nothing behind to
     show as a ring.
 
-    Transcribed from daisy.svg at 108x108. The SVG gradient carries a
+    Transcribed from daisy.svg at 108x108. The gradient carries a
     gradientTransform of matrix(1.08,0,0,1.08,-10.8,-10.8), which resolves its
     y1=110/y2=10 onto user-space y=108/y=0; the stops below use those resolved
     coordinates, so the ramp spans the full badge height.
 
+    Both arcs are stroked with linecap round, matching the SVG.
     Scaled 0.667 into the 72dp safe zone, offset 18.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -40,25 +41,25 @@
             </aapt:attr>
         </path>
 
-        <!-- Outer quarter ring: stroke 10.6667. -->
+        <!-- Outer quarter ring: radius 53.3415, stroke 10.6584, round cap. -->
         <path
             android:strokeColor="#FFFFFF"
-            android:strokeWidth="10.6667"
-            android:strokeLineCap="butt"
+            android:strokeWidth="10.6584"
+            android:strokeLineCap="round"
             android:fillColor="#00000000"
-            android:pathData="M 22,27.333351 A 58.666649,58.666664 0 0 1 80.666649,86.000015" />
+            android:pathData="M 27.329201,27.329201 A 53.341534,53.341599 0 0 1 80.670734,80.670799" />
 
-        <!-- Inner quarter ring: stroke 10.5, radius 36.75. -->
+        <!-- Inner quarter ring: radius 33.3943, stroke 10.6056, round cap. -->
         <path
             android:strokeColor="#FFFFFF"
-            android:strokeWidth="10.5"
-            android:strokeLineCap="butt"
+            android:strokeWidth="10.6056"
+            android:strokeLineCap="round"
             android:fillColor="#00000000"
-            android:pathData="M 22,49.250015 A 36.749985,36.749992 0 0 1 58.749985,86.000008" />
+            android:pathData="M 27.302799,47.302799 A 33.394344,33.39439 0 0 1 60.697144,80.697189" />
 
-        <!-- Yellow dot: r=10 at (32, 76). -->
+        <!-- Yellow dot: r=11 at (33, 75). -->
         <path
             android:fillColor="#E8E833"
-            android:pathData="M32,66 a10,10 0 1,0 0.01,0 z" />
+            android:pathData="M33,64 a11,11 0 1,0 0.01,0 z" />
     </group>
 </vector>
