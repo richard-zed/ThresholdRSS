@@ -110,8 +110,21 @@ dependencies {
     // cache with feed parsing. It does NOT mean the OkHttp version is shared
     // for free: coil-network-okhttp declares 4.12.0, Daisy pins 5.5.1, and the
     // exclude below is what stops that being two versions in the graph.
-    implementation("io.coil-kt.coil3:coil-compose:3.6.3")
-    implementation("io.coil-kt.coil3:coil-network-okhttp:3.6.3") {
+    //
+    // 3.5.0, not the newest. Coil 3.6.0 moved to Compose Multiplatform 1.12.0,
+    // which depends on androidx.compose.foundation 1.12.0 -- and 1.12.0
+    // requires AGP 9.1.0+, so it cannot be used with this build's AGP 9.0.1.
+    // 3.5.0 targets CMP 1.11.1 and resolves against a Compose vintage the BOM
+    // still covers. The alternative was bumping AGP to satisfy a transitive
+    // dependency, which would make the build's toolchain requirement a
+    // function of what Coil ships.
+    //
+    // Excluding the org.jetbrains.compose group is NOT an option: coil's
+    // compose artifact has no AndroidX Compose dependency of its own, so CMP
+    // is the only Compose it links against. Removing it leaves AsyncImage
+    // with nothing.
+    implementation("io.coil-kt.coil3:coil-compose:3.5.0")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.5.0") {
         // coil-network-okhttp declares OkHttp 4.12.0; Daisy pins 5.5.1. Gradle
         // would pick 5.5.1 anyway (higher wins), but leaving that implicit means
         // the resolved graph depends on ordering rather than on a decision.
