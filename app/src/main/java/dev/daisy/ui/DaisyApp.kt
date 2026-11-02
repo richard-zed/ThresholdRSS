@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.animateItemPlacement
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -416,9 +415,11 @@ private fun FeedPickerScreen(
                     SwipeToDismissBox(
                         state = dismissState,
                         // Slides the rows below up into the freed space instead
-                        // of them teleporting. animateItemPlacement is the API
-                        // this Compose BOM has; animateItem() arrived later.
-                        modifier = Modifier.animateItemPlacement(),
+                        // of them teleporting. animateItem() is the current
+                        // modifier: it replaced animateItemPlacement, which was
+                        // deprecated and then removed, so the old name no longer
+                        // resolves at all rather than merely warning.
+                        modifier = Modifier.animateItem(),
                         enableDismissFromStartToEnd = false,
                         backgroundContent = {
                             Box(
