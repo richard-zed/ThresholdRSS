@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -47,7 +48,6 @@ import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.ui.graphics.Color
@@ -207,12 +207,31 @@ private fun FeedListScreen(
         onMessageShown()
     }
 
-    // Pull-to-refresh reports through this flag rather than the state stream,
-    // because the indicator has to retract the moment the sync finishes and
-    // `state.syncing` is cleared in a finally block one frame later.
+    // Pull-to-refresh reports through this flag rather than reading
+    // `state.syncing` directly. The spinner has to retract when the sync
+    // finishes, and `state.syncing` clears in a finally block a frame later --
+    // reading it directly would leave the indicator spinning after the work
+    // was done.
+    //
+    // The trap: this effect keys on `state.syncing`, and onRefresh sets
+    // pullRefreshing = true in the SAME event that calls sync(). sync() sets
+    // syncing = true inside a coroutine, so the effect does not necessarily
+    // re-run before the sync completes -- but the very first run of this effect
+    // happens at first composition, when syncing is false, and clears the flag.
+    // Worse, `if (!state.syncing) pullRefreshing = false` fires on EVERY
+    // recomposition where syncing is false, which includes the recomposition
+    // caused by onRefresh setting the flag. The flag was being cleared before
+    // it was ever painted, so isRefreshing never went true and the indicator
+    // never appeared.
+    //
+    // Fix: only retract on a true -> false EDGE of state.syncing. Tracking the
+    // previous value means a recomposition with syncing still false is not an
+    // edge and does nothing.
     var pullRefreshing by remember { mutableStateOf(false) }
+    var wasSyncing by remember { mutableStateOf(state.syncing) }
     LaunchedEffect(state.syncing) {
-        if (!state.syncing) pullRefreshing = false
+        if (wasSyncing && !state.syncing) pullRefreshing = false
+        wasSyncing = state.syncing
     }
 
     val oneFeed = screen as? Screen.OneFeed
@@ -224,11 +243,27 @@ private fun FeedListScreen(
             // ~80dp tall with generous horizontal insets on every item, which
             // is a lot of chrome for three destinations on a phone. 56dp
             // matches a Material toolbar and keeps the icons thumb-sized.
+            // The background has to be applied BEFORE navigationBarsPadding,
+            // not after. Modifier order is outside-in: with the padding first,
+            // the padding pushes the background (and the 56dp content) up out
+            // of the gesture area, leaving a transparent strip from the bar's
+            // bottom edge to the screen bottom. Drawing the background first
+            // and letting the inset expand the box inside it makes the tint
+            // run to the physical bottom while the icons stay above the
+            // gesture handle.
+            //
+            // For the same reason .height(56.dp) is followed by insetsPadding,
+            // not the other way round: height sets the CONTENT row, and the
+            // insets are added on top of that height rather than eaten from it.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceContainer),
+            ) {
             Row(
                 Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
                     .height(56.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -283,17 +318,29 @@ private fun FeedListScreen(
                     )
                 }
             }
+            }
         },
     ) { padding ->
         PullToRefreshBox(
             isRefreshing = pullRefreshing,
             onRefresh = {
                 pullRefreshing = true
-                onSync()
+                // A sync with no feeds returns immediately without touching
+                // `syncing`, so no edge would ever arrive and the indicator
+                // would spin forever. Ask before arming it.
+                if (state.feeds.isEmpty()) {
+                    pullRefreshing = false
+                } else {
+                    onSync()
+                }
             },
             modifier = Modifier
                 .padding(padding)
-                .fillMaxSize(),
+                .fillMaxSize()
+                // The top bar is gone, so nothing else reserves the status
+                // bar. Without this the first date rule slides under the
+                // clock.
+                .statusBarsPadding(),
         ) {
             when {
                 state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -374,27 +421,21 @@ private fun FeedPickerScreen(
     onOpenFeed: (Long) -> Unit,
     onRemoveFeed: (Long) -> Unit,
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Feeds") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "All entries")
-                    }
-                },
-                actions = {
-                    TextButton(onClick = onShowAll) { Text("All") }
-                },
-            )
-        },
-    ) { padding ->
+    // No top bar, matching the entry list. These three screens are peers, so
+    // they carry the same chrome -- a toolbar on two of them made switching
+    // between them look like entering and leaving an app.
+    Scaffold { padding ->
+        // A Column so the back row can sit above the scroll container.
+        // Inside the LazyColumn it would scroll away, and a back affordance
+        // you have to scroll up to find is not one.
+        Column(Modifier.padding(padding).fillMaxSize()) {
+        BackRow(label = "All entries", onClick = onBack)
         if (state.feeds.isEmpty()) {
-            Box(Modifier.padding(padding).fillMaxSize(), Alignment.Center) {
+            Box(Modifier.fillMaxSize(), Alignment.Center) {
                 Text("No feeds yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            LazyColumn(Modifier.padding(padding).fillMaxSize()) {
+            LazyColumn(Modifier.fillMaxSize()) {
                 items(state.feeds, key = { "feed-${it.id}" }) { feed ->
                     val dismissState = rememberSwipeToDismissBoxState(
                         // Destructive, so a swipe alone does not commit it: the
@@ -482,6 +523,7 @@ private fun FeedPickerScreen(
                 }
             }
         }
+        }
     }
 }
 
@@ -539,23 +581,14 @@ private fun AddFeedScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            TopAppBar(
-                title = { Text("Add feed") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
-        },
     ) { padding ->
         Column(
             Modifier
                 .padding(padding)
-                .fillMaxSize()
-                .padding(16.dp),
+                .fillMaxSize(),
         ) {
+            BackRow(label = "All entries", onClick = onBack)
+            Column(Modifier.padding(16.dp)) {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
@@ -666,6 +699,7 @@ private fun AddFeedScreen(
             ) {
                 Text("Import from OPML file")
             }
+            }
         }
     }
 }
@@ -723,6 +757,40 @@ private fun BarTab(
  * also why the rule does not simply run edge to edge: a full-bleed line still
  * cuts the page in half.
  */
+/**
+ * A plain back affordance for screens with no top bar.
+ *
+ * Icon and label together, 48dp tall so the target clears the touch minimum
+ * without a Row of its own padding arithmetic. Left-aligned on purpose: the
+ * bottom bar already puts its back arrow at the far left, and these two should
+ * not sit on opposite sides of the screen.
+ */
+@Composable
+private fun BackRow(label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+}
+
 @Composable
 private fun DayHeader(dayStart: Long) {
     val line = MaterialTheme.colorScheme.outlineVariant
