@@ -613,7 +613,13 @@ private fun FeedPickerScreen(
                         // zIndex lifts the dragged row over its neighbours so
                         // the row it slides across does not paint on top of it.
                         modifier = Modifier
-                            .animateItem()
+                            // zIndex must be OUTERMOST for the dragged row to
+                            // paint over its neighbours. Painting order among
+                            // siblings is settled by the outermost zIndex on
+                            // each child; putting animateItem or graphicsLayer
+                            // ahead of it leaves the modifier that actually
+                            // controls stacking further in than the one that
+                            // creates a layer, and the row stays underneath.
                             .zIndex(if (isDragging) 1f else 0f)
                             // Translucent while held, so the insertion line on
                             // the row underneath stays visible. graphicsLayer
@@ -622,6 +628,9 @@ private fun FeedPickerScreen(
                             // a draw-time property, so it cannot cause the
                             // layout to re-measure mid-drag.
                             .graphicsLayer { alpha = if (isDragging) 0.75f else 1f }
+                            // Below the layer modifier, so animating placement
+                            // cannot reorder the stacking.
+                            .animateItem()
                             .offset { IntOffset(0, nudge.roundToInt()) }
                             // Keyed on index as well as id: the lambda closes
                             // over `index`, and after a reorder every row's
