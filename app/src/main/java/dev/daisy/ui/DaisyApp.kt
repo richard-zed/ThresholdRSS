@@ -151,7 +151,11 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
             bar = {
                 DestinationBar(
                     current = Screen.All,
-                    onShowFeeds = { screen = Screen.Feeds },
+                    // Clearing openEntry is what actually leaves the article:
+                    // `entry != null` is tested first, so setting the screen
+                    // alone changed nothing and the Feeds button looked dead.
+                    // All and Add cleared it; this one did not.
+                    onShowFeeds = { openEntry = null; screen = Screen.Feeds },
                     onShowAll = {
                         openEntry = null
                         vm.selectFeed(null)

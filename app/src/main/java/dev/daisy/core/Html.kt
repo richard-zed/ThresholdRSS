@@ -51,13 +51,52 @@ object Html {
     /** Tags whose content is literal text. */
     private val RAW_TEXT = setOf("script", "style", "textarea", "title")
 
-    /** One element. Children and text are both ordered-free; text is direct only. */
+    /** Name marker for the text-run nodes kept in [Node.order]. Not a real tag. */
+    private const val TEXT_RUN = "\u0000text"
+
+    /** One element. `text` is direct only; `order` preserves document order. */
     class Node(val name: String, val attrs: Map<String, String>, val parent: Node?) {
         val children = ArrayList<Node>()
         var text: StringBuilder? = null
 
+        /**
+         * What this node holds, in the order it appeared.
+         *
+         * A node needs this because a buffer of its own text plus a list of
+         * its children loses the interleaving. `<strong><a>Qt</a> 6.12.0
+         * </strong>` keeps "Qt" and " 6.12.0" in separate places, so anything
+         * re-emitting the node has no way to know the link came first and
+         * every inline link slides to the end of its paragraph.
+         *
+         * Entries are either a [Node] or a run of text appended under a node
+         * created for that purpose, marked by [isTextRun].
+         */
+        val order = ArrayList<Node>()
+
+        /** True for the pseudo-nodes that carry a text run in [order]. */
+        val isTextRun: Boolean get() = name == TEXT_RUN
+
         /** Direct text, not including descendants. */
         fun text(): String = text?.toString().orEmpty()
+
+        /** Records direct text, both in the flat buffer and in [order]. */
+        fun appendText(t: String) {
+            (text ?: StringBuilder().also { text = it }).append(t)
+            val last = order.lastOrNull()
+            val run = if (last != null && last.isTextRun) {
+                last
+            } else {
+                Node(TEXT_RUN, emptyMap(), this).also { order.add(it) }
+            }
+            val rb = run.text ?: StringBuilder().also { run.text = it }
+            rb.append(t)
+        }
+
+        /** Records a child, both in the child list and in [order]. */
+        fun appendChild(c: Node) {
+            children.add(c)
+            order.add(c)
+        }
 
         /** All text under this node, whitespace collapsed. */
         fun innerText(): String {
@@ -116,11 +155,11 @@ object Html {
             val t = text.toString()
             text.setLength(0)
             val cur = stack.lastOrNull() ?: return
-            (cur.text ?: StringBuilder().also { cur.text = it }).append(t)
+            cur.appendText(t)
         }
 
         fun push(node: Node) {
-            if (stack.isEmpty()) roots.add(node) else stack.last().children.add(node)
+            if (stack.isEmpty()) roots.add(node) else stack.last().appendChild(node)
             stack.add(node)
         }
 
@@ -214,7 +253,7 @@ object Html {
                 val end = if (close < 0) n else close
                 val raw = src.substring(i, end)
                 if (raw.isNotEmpty()) {
-                    (node.text ?: StringBuilder().also { node.text = it }).append(raw)
+                    node.appendText(raw)
                 }
                 i = end
             }

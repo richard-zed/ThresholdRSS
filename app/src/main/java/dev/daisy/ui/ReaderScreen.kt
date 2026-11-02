@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -22,6 +23,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -110,7 +113,11 @@ internal fun ArticleScreen(
                 } else {
                     body
                 }
-                ArticleBody(html, Modifier.weight(1f).fillMaxWidth())
+                ArticleBody(
+                    html = html,
+                    palette = ArticlePalette.of(MaterialTheme.colorScheme),
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
             }
 
             item.link?.let { link ->
@@ -161,6 +168,82 @@ private fun fetchAndExtract(context: android.content.Context, url: String): Read
 private fun escape(s: String): String =
     s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+
+/**
+ * The four colours the article's WebView needs, resolved from the app theme.
+ *
+ * A WebView is a separate document: it inherits nothing from Compose, so the
+ * reader's colours have to be written into the page. Before this the link
+ * colour was a literal green pair chosen against the system scheme, which
+ * meant the article ignored the Material You accent and could disagree with
+ * the app around it.
+ *
+ * Read straight from [ColorScheme], so a theme change repaints the article
+ * with no extra state to keep in step.
+ */
+private data class ArticlePalette(
+    val background: Int,
+    val backgroundCss: String,
+    val textCss: String,
+    val linkCss: String,
+    val scheme: String,
+) {
+    /** Cheap change key; a paint only happens when this differs. */
+    val key: String get() = backgroundCss + textCss + linkCss + scheme
+
+    companion object {
+        fun of(cs: ColorScheme): ArticlePalette {
+            // luminance() rather than isLight: the dynamic palette's surface
+            // decides this, and a user can force a dark scheme on a light
+            // device (or the reverse).
+            val dark = cs.background.luminance() < 0.5f
+            val link = cs.primary
+            return ArticlePalette(
+                background = cs.background.toArgb(),
+                backgroundCss = cs.background.toCssHex(),
+                textCss = cs.onBackground.toCssHex(),
+                // Primary is tuned for composables on surface, and reads fine
+                // as body text; secondary is the fallback when primary sits too
+                // close to the background to read as a link.
+                linkCss = (if (link.contrastAgainst(cs.background) >= 3f) link else cs.secondary).toCssHex(),
+                scheme = if (dark) "dark" else "light",
+            )
+        }
+    }
+}
+
+/**
+ * `#RRGGBB` from a Compose colour, for injection into CSS.
+ *
+ * Built by hand rather than with [String.format]: the format is locale
+ * sensitive on Android (an Arabic locale renders non-ASCII digits), and this
+ * runs on every theme resolve.
+ */
+private fun Color.toCssHex(): String {
+    fun hex(v: Float): String {
+        val n = (v * 255f).toInt().coerceIn(0, 255)
+        return HEX_DIGITS[n shr 4].toString() + HEX_DIGITS[n and 0x0F]
+    }
+    return "#" + hex(red) + hex(green) + hex(blue)
+}
+
+private const val HEX_DIGITS = "0123456789ABCDEF"
+
+/**
+ * WCAG-ish contrast ratio between two colours.
+ *
+ * Used only to pick between two theme roles, so the exact formula matters
+ * less than having one: an accent that matches the page background is
+ * unreadable as a link regardless of which rounding is used.
+ */
+private fun Color.contrastAgainst(other: Color): Float {
+    val a = luminance()
+    val b = other.luminance()
+    val hi = maxOf(a, b)
+    val lo = minOf(a, b)
+    return (hi + 0.05f) / (lo + 0.05f)
+}
+
 /**
  * Renders a feed body in a WebView.
  *
@@ -170,7 +253,11 @@ private fun escape(s: String): String =
  */
 @SuppressLint("ClickableViewAccessibility")
 @Composable
-private fun ArticleBody(html: String, modifier: Modifier = Modifier) {
+private fun ArticleBody(
+    html: String,
+    palette: ArticlePalette,
+    modifier: Modifier = Modifier,
+) {
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
@@ -182,11 +269,14 @@ private fun ArticleBody(html: String, modifier: Modifier = Modifier) {
             }
         },
         update = { view ->
-            // Only reload when the content actually changed, otherwise every
-            // recomposition would re-parse the document and reset scroll.
-            if (view.tag != html) {
-                view.tag = html
-                view.loadDataWithBaseURL(null, wrapForDisplay(html), "text/html", "utf-8", null)
+            // Only reload when the content or the colours actually changed,
+            // otherwise every recomposition re-parses the document and resets
+            // the reader's scroll position.
+            val key = palette.key + "\u0000" + html
+            if (view.tag != key) {
+                view.tag = key
+                view.setBackgroundColor(palette.background)
+                view.loadDataWithBaseURL(null, wrapForDisplay(html, palette), "text/html", "utf-8", null)
             }
         },
     )
@@ -199,19 +289,19 @@ private fun ArticleBody(html: String, modifier: Modifier = Modifier) {
  * our only interest is that it does not demand a desktop viewport or use a
  * colour that vanishes against a dark theme.
  */
-private fun wrapForDisplay(fragment: String): String = """
+private fun wrapForDisplay(fragment: String, palette: ArticlePalette): String = """
     <!doctype html>
     <html><head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-      :root { color-scheme: light dark; }
-      html, body { margin: 0; padding: 12px; }
-      body { font: 17px/1.5 system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
+      :root { color-scheme: ${palette.scheme}; }
+      html, body { margin: 0; padding: 12px; background: ${palette.backgroundCss}; }
+      body { color: ${palette.textCss}; font: 17px/1.5 system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
       img, video, iframe { max-width: 100%; height: auto; }
       pre, code { overflow-x: auto; }
       table { max-width: 100%; display: block; overflow-x: auto; }
-      a { color: #2F6F4E; }
-      @media (prefers-color-scheme: dark) { a { color: #97D5AC; } }
+      a { color: ${palette.linkCss}; }
+      blockquote { border-left: 3px solid ${palette.linkCss}; margin-left: 0; padding-left: 12px; opacity: .85; }
     </style>
     </head><body>$fragment</body></html>
 """.trimIndent()

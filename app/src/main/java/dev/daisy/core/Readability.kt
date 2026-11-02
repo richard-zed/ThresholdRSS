@@ -233,10 +233,32 @@ object Readability {
         return find(root, 0)?.innerText()
     }
 
+    /**
+     * The byline, or null.
+     *
+     * The old pattern had a second alternative that matched any lowercase word
+     * followed by a date, so body prose answered it: a sentence containing
+     * "on October 1, 2026" returned "October 1, 2026" as the author. Two
+     * lookalikes are rejected now: a bare date, which no longer matches at all,
+     * and "by the team", where the word after "by" is an article.
+     */
     private fun bylineIn(root: Html.Node): String? {
-        val re = Regex("(?i)\\bby\\s+[A-Z][\\w.'-]+(?:\\s+[A-Z][\\w.'-]+)?|\\b[a-z]+\\s+\\d{1,2},\\s+\\d{4}\\b")
-        return re.find(root.innerText())?.value?.trim()
+        // Requires a capitalised name after by/written by, and refuses to start
+        // on a common English word, which is what "by the team" trips.
+        val re = Regex("(?i)\\b(?:written\\s+)?by[:\\s]+([A-Z][\\w.'-]+(?:\\s+(?:[A-Z][\\w.'-]*|[A-Z]\\.)){0,3})")
+        for (m in re.findAll(root.innerText())) {
+            val name = m.groupValues[1].trim()
+            if (name.substringBefore(' ').lowercase() in NOT_A_NAME) continue
+            return name
+        }
+        return null
     }
+
+    /** Words that follow "by" in prose but never name an author. */
+    private val NOT_A_NAME = setOf(
+        "the", "a", "an", "this", "that", "these", "those",
+        "our", "their", "your", "his", "her", "its", "my",
+    )
 
     /**
      * Re-emits an element as an HTML fragment.
@@ -258,10 +280,19 @@ object Readability {
         fun attr(s: String) = esc(s).replace("\"", "&quot;")
 
         fun go(n: Html.Node) {
-            val direct = n.text()
-            if (direct.isNotBlank()) sb.append(esc(direct))
-
-            for (c in n.children) {
+            // Walk `order`, not "all my text, then my children".
+            //
+            // The flat text buffer has no idea where the children sat, so
+            // emitting it first pushes every inline link to the end of its
+            // paragraph: <strong><a>Qt</a> 6.12.0</strong> came out as
+            // "6.12.0 Qt" with the link trailing the sentence. `order`
+            // records what arrived when, so the run below stays in place.
+            for (c in n.order) {
+                if (c.isTextRun) {
+                    val t = c.text()
+                    if (t.isNotBlank()) sb.append(esc(t))
+                    continue
+                }
                 when (c.name) {
                     "p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li",
                     "blockquote", "pre", "code", "em", "strong", "b", "i", "u",
