@@ -86,10 +86,12 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
-    // material-icons-core was dropped: the small fixed icon set does not
-    // include Refresh or Add, and pulling in material-icons-extended for two
-    // glyphs costs several MB of APK. Text buttons instead. Re-add the
-    // extended artifact if real icons become worth that.
+    implementation("androidx.compose.material:material-icons-core")
+    // material-icons-core, not -extended. The bottom bar needs List, Add and
+    // Settings; all three ship in core, which is a few hundred KB. Extended is
+    // tens of MB and still the wrong trade. Refresh is gone from the UI
+    // entirely -- pull-to-refresh replaced it -- so the glyph that core used to
+    // lack is no longer needed.
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
     // collectAsStateWithLifecycle lives here, not in lifecycle-runtime-ktx.
@@ -97,4 +99,25 @@ dependencies {
     // released together and a split version is a quiet way to get a mismatch.
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("androidx.core:core-ktx:1.13.1")
+
+    // Coil 3, split in two on purpose: coil-core dropped network loading in
+    // 3.0, so the network artifact is mandatory and the app is not functional
+    // without it. AsyncImage("https://...") with only coil-compose loads
+    // nothing and reports no error.
+    //
+    // The OkHttp variant rather than Ktor because Daisy already speaks OkHttp,
+    // so image fetches share one client, one connection pool and one disk
+    // cache with feed parsing. It does NOT mean the OkHttp version is shared
+    // for free: coil-network-okhttp declares 4.12.0, Daisy pins 5.5.1, and the
+    // exclude below is what stops that being two versions in the graph.
+    implementation("io.coil-kt.coil3:coil-compose:3.6.3")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.6.3") {
+        // coil-network-okhttp declares OkHttp 4.12.0; Daisy pins 5.5.1. Gradle
+        // would pick 5.5.1 anyway (higher wins), but leaving that implicit means
+        // the resolved graph depends on ordering rather than on a decision.
+        // Stating it here makes the mismatch visible at the point it is
+        // introduced. Compiled-against-4 / running-on-5 is the usual supported
+        // path for OkHttp, but it is not nothing, so it is declared not assumed.
+        exclude(group = "com.squareup.okhttp3", module = "okhttp")
+    }
 }

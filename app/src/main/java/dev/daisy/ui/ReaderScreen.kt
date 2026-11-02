@@ -133,7 +133,10 @@ fun ReaderScreen(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ArticleScreen(item: Item, onBack: () -> Unit) {
+// internal, not private: DaisyApp opens an article straight from the merged
+// entry list, which is a different file. A second copy of this screen there
+// would drift from the one ReaderScreen shows.
+internal fun ArticleScreen(item: Item, onBack: () -> Unit) {
     val context = LocalContext.current
 
     Scaffold(

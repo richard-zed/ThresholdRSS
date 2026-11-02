@@ -50,6 +50,15 @@ data class UiState(
     val failures: Map<Long, String> = emptyMap(),
     /** Shown once, then cleared by the UI. */
     val message: String? = null,
+    /**
+     * When set, [buckets] holds ONLY this feed's items.
+     *
+     * Filtering happens in the snapshot rather than in the composable so the
+     * merged and filtered views go through the same grouping code -- the day
+     * headers, ordering and dedupe are identical because it is the same
+     * function, not a second implementation that can drift.
+     */
+    val feedFilterId: Long? = null,
 ) {
     val isEmpty: Boolean get() = feeds.isEmpty() && !loading
 }
@@ -118,7 +127,8 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             // loadAllItems is already newest-first (Merge sorted it);
             // DayBuckets requires that order and deliberately does not sort.
-            val snapshot = withContext(Dispatchers.IO) { snapshotLocked() }
+            val filter = _state.value.feedFilterId
+            val snapshot = withContext(Dispatchers.IO) { snapshotLocked(filter) }
             _state.update {
                 it.copy(feeds = snapshot.first, buckets = snapshot.second, loading = false)
             }
@@ -274,13 +284,19 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Discover, then subscribe.
+     * Discover what lives at an address, without subscribing to anything.
+     *
+     * Deliberately does NOT add on success. A found feed lands in the state as
+     * [DiscoverState.Found] and waits there; the user reads the resolved URL
+     * and title and calls [confirmAdd]. Subscribing straight off the back of a
+     * walk meant the app could silently attach to the wrong feed -- a site
+     * offers several, and which one the sniffer reached first was invisible.
      *
      * Discovery reports per-candidate progress, so the state stream is the UI's
      * only liveness signal -- there is nothing to await in the composable. The
      * guard on `Looking` stops a second tap starting a competing walk.
      */
-    fun addFeed(input: String) {
+    fun findFeed(input: String) {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return
         if (_state.value.discover is DiscoverState.Looking) return
@@ -293,20 +309,58 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
             )
 
             when (found) {
-                is DiscoverState.Found -> {
-                    val added = withContext(Dispatchers.IO) {
-                        writeLock.withLock { subscribe(found.feedUrl, found.title) }
-                    }
-                    _state.update {
-                        it.copy(
-                            discover = DiscoverState.Idle,
-                            message = if (added) "Added" else "Already subscribed",
-                        )
-                    }
-                    load()
-                }
+                is DiscoverState.Found -> _state.update { it.copy(discover = found) }
                 is DiscoverState.NotFound -> _state.update { it.copy(discover = found) }
                 else -> _state.update { it.copy(discover = DiscoverState.Idle) }
+            }
+        }
+    }
+
+    /**
+     * Subscribe to what [findFeed] resolved.
+     *
+     * Reads the URL from the state rather than taking it as a parameter, so
+     * what gets added is exactly what the UI displayed for confirmation. A
+     * parameter would let a stale composition hand back a URL the user never
+     * saw.
+     */
+    fun confirmAdd() {
+        val found = _state.value.discover as? DiscoverState.Found ?: return
+
+        viewModelScope.launch {
+            val added = withContext(Dispatchers.IO) {
+                writeLock.withLock { subscribe(found.feedUrl, found.title) }
+            }
+            _state.update {
+                it.copy(
+                    discover = DiscoverState.Idle,
+                    message = if (added) "Added" else "Already subscribed",
+                )
+            }
+            // Read back inside the lock, like every other write in this class.
+            val snapshot = withContext(Dispatchers.IO) {
+                writeLock.withLock { snapshotLocked() }
+            }
+            _state.update {
+                it.copy(feeds = snapshot.first, buckets = snapshot.second, loading = false)
+            }
+        }
+    }
+
+    /**
+     * Show all feeds, or only [feedId]'s entries.
+     *
+     * Re-reads rather than filtering the buckets already in state, because a
+     * filtered view must reflect what is on disk for THAT feed -- including
+     * items a sync added since the merged list was built.
+     */
+    fun selectFeed(feedId: Long?) {
+        if (_state.value.feedFilterId == feedId) return
+        _state.update { it.copy(feedFilterId = feedId, loading = true) }
+        viewModelScope.launch {
+            val snapshot = withContext(Dispatchers.IO) { snapshotLocked(feedId) }
+            _state.update {
+                it.copy(feeds = snapshot.first, buckets = snapshot.second, loading = false)
             }
         }
     }
@@ -391,10 +445,21 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
      * reappear. Dispatchers.IO is the caller's job, not this function's, so it
      * can be used inside a lock without nesting dispatchers.
      */
-    private fun snapshotLocked(): Pair<List<Feed>, List<DayBucket>> {
+    private fun snapshotLocked(filterId: Long? = null): Pair<List<Feed>, List<DayBucket>> {
         val feeds = store.loadFeeds()
-        val buckets =
-            if (feeds.isEmpty()) emptyList() else DayBuckets.group(store.loadAllItems(), zone)
+        val buckets = if (feeds.isEmpty()) {
+            emptyList()
+        } else {
+            val items = if (filterId == null) {
+                store.loadAllItems()
+            } else {
+                // loadItems, not loadAllItems().filter: the filtered view reads
+                // exactly one file, and a filter over the merged list would
+                // sort it again after the fact.
+                store.loadItems(filterId)
+            }
+            DayBuckets.group(items, zone)
+        }
         return feeds to buckets
     }
 
