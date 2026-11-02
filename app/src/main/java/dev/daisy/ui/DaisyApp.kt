@@ -918,19 +918,25 @@ internal fun ItemRow(
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    // weight(1f, fill = false) lets the title take only what
-                    // it needs and leaves the rest to the time. Plain
-                    // weight(1f) would stretch it to half the row and open a
-                    // gap between a short name and its timestamp.
+                    // NO WEIGHT. Two weighted children in one Row share the
+                    // slack, so the timestamp's position depended on how long
+                    // the feed name happened to be -- three names, three
+                    // alignments. The spacer below is now the only flexible
+                    // element, which pins the time to the right edge for
+                    // every row.
+                    //
+                    // Bounded by fillMaxWidth(0.6f) rather than a weight:
+                    // weightless with no bound let a long name push the time
+                    // clean off the edge, because maxLines/ellipsis clip
+                    // HEIGHT, not width. A fraction of the row leaves the
+                    // timestamp its space no matter what the feed is called.
                     modifier = Modifier
-                        .weight(1f, fill = false)
+                        .fillMaxWidth(0.6f)
                         .clickable(onClick = onFeedClick),
                 )
             }
-            // No weight here. The time is the LAST element and the title
-            // above already absorbs the slack, so this lands hard against the
-            // right edge and lines up down the column. Giving it weight(1f)
-            // as well was what let it wander when the title ran short.
+            // The only weighted child in the row, so the time lands hard
+            // against the right edge and lines up down the column.
             Spacer(Modifier.weight(1f))
             Text(
                 text = entryTime(item),

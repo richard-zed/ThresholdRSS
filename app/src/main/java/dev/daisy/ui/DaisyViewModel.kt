@@ -249,12 +249,23 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
                     } ?: stored
                 }
                 store.saveFeeds(current)
-                snapshotLocked()
+                // The FILTER matters. snapshotLocked() with no argument
+                // returns the merged stream, so a sync started from one
+                // feed's view rebuilt the buckets for every feed and the
+                // screen silently became the all-entries list. Read the
+                // filter from state at this point rather than trusting a
+                // captured one: it is what the UI is displaying now.
+                snapshotLocked(_state.value.feedFilterId)
             }
         }
 
+        // Only claim everything failed when everything was actually tried.
+        // A single-feed refresh whose one feed threw hit this branch and
+        // reported "All feeds failed", which reads as a whole-app outage
+        // for a one-feed error.
         val summary = when {
             failures.isEmpty() -> if (inserted == 0) "No new items" else "$inserted new"
+            feeds.size == 1 -> "Refresh failed: ${failures.values.first()}"
             failures.size == feeds.size -> "All feeds failed"
             else -> "$inserted new, ${failures.size} failed"
         }
