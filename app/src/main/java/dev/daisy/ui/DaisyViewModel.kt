@@ -367,10 +367,27 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
             val added = withContext(Dispatchers.IO) {
                 writeLock.withLock { subscribe(found.feedUrl, found.title) }
             }
+            // Fetch it NOW. subscribe() leaves an empty items file, and nothing
+            // else fills it until the next sync -- so a newly added feed showed
+            // "No entries" and looked broken until the user refreshed by hand.
+            // That is the whole reason a federated feed appeared to have no
+            // posts when the feed itself was fine.
+            if (added != null) {
+                withContext(Dispatchers.IO) {
+                    try {
+                        refreshOne(added, System.currentTimeMillis())
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        // A first fetch that fails must not lose the feed: it is
+                        // subscribed, just empty, and the next sync retries.
+                    }
+                }
+            }
             _state.update {
                 it.copy(
                     discover = DiscoverState.Idle,
-                    message = if (added) "Added" else "Already subscribed",
+                    message = if (added != null) "Added" else "Already subscribed",
                 )
             }
             // Read back inside the lock, like every other write in this class.
@@ -419,30 +436,30 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
      * the id could collide with a feed added between them. Caller holds
      * [writeLock].
      */
-    private fun subscribe(feedUrl: String, title: String?): Boolean {
+    private fun subscribe(feedUrl: String, title: String?): Feed? {
         val feeds = store.loadFeeds()
-        if (feeds.any { it.url == feedUrl }) return false
+        if (feeds.any { it.url == feedUrl }) return null
 
         // Ids are never reused, so a stale items file cannot be adopted by a
         // different feed after a remove/re-add cycle.
         val id = (feeds.maxOfOrNull { it.id } ?: 0L) + 1L
-        store.saveFeeds(
-            feeds + Feed(
-                id = id,
-                url = feedUrl,
-                title = title ?: feedUrl,
-                // Model.kt claims faviconUrl is "derived from siteUrl" but
-                // nothing ever derived it, so the field was permanently null
-                // and every avatar check was dead. A feed URL is not the same
-                // as the site's origin, so derive it here: nitter-style URLs
-                // and /feed paths both have to resolve back to a host.
-                faviconUrl = faviconFor(feedUrl),
-            ),
+        val feed = Feed(
+            id = id,
+            url = feedUrl,
+            title = title ?: feedUrl,
+            // Model.kt claims faviconUrl is "derived from siteUrl" but
+            // nothing ever derived it, so the field was permanently null
+            // and every avatar check was dead. A feed URL is not the same
+            // as the site's origin, so derive it here: nitter-style URLs
+            // and /feed paths both have to resolve back to a host.
+            faviconUrl = faviconFor(feedUrl),
         )
+        store.saveFeeds(feeds + feed)
         // An empty items file, so a feed with no items yet still reads as
-        // "known and empty" rather than missing.
+        // "known and empty" rather than missing. The caller fills it straight
+        // away -- see confirmAdd.
         store.saveItems(id, emptyList())
-        return true
+        return feed
     }
 
     /**
@@ -551,7 +568,9 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
         var added = 0
         val snapshot = withContext(Dispatchers.IO) {
             writeLock.withLock {
-                added = entries.count { e -> subscribe(e.url, e.title) }
+                // subscribe returns the new Feed (null when already present),
+                // so the count is over non-null results rather than a Boolean.
+                added = entries.count { e -> subscribe(e.url, e.title) != null }
                 snapshotLocked()
             }
         }

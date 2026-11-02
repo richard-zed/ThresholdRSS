@@ -395,18 +395,29 @@ private fun FeedPickerScreen(
                         // Destructive, so a swipe alone does not commit it: the
                         // row springs back and the delete runs only once the
                         // user is far enough past the edge to have meant it.
+                        //
+                        // Returning true is what made the removal feel broken:
+                        // it tells the box the row IS swiped away, so the row
+                        // stays parked off-screen while removeFeed does disk
+                        // work in a coroutine -- a long pause with the row gone
+                        // but its space still occupied -- and then the whole
+                        // list jumps when state finally arrives. Committing
+                        // here means the row springs back and disappears in the
+                        // same frame the new list lands.
                         confirmValueChange = { value ->
                             if (value == SwipeToDismissBoxValue.EndToStart) {
                                 onRemoveFeed(feed.id)
-                                true
-                            } else {
-                                false
                             }
+                            false
                         },
                     )
 
                     SwipeToDismissBox(
                         state = dismissState,
+                        // Slides the rows below up into the freed space instead
+                        // of them teleporting. animateItemPlacement is the API
+                        // this Compose BOM has; animateItem() arrived later.
+                        modifier = Modifier.animateItemPlacement(),
                         enableDismissFromStartToEnd = false,
                         backgroundContent = {
                             Box(
