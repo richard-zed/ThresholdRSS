@@ -80,7 +80,20 @@ object FeedParser {
     private fun toItem(el: El, baseUrl: String, atom: Boolean): IncomingItem? {
         val child = { n: String -> el.children.firstOrNull { local(it.name).equals(n, true) } }
 
-        val title = child("title")?.text()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        // A MISSING title is not a missing item.
+        //
+        // This used to `?: return null`, which silently dropped every entry
+        // whose feed omitted <title>. Mastodon never emits one -- a post is
+        // <guid>, <link>, <pubDate>, <description> and nothing else -- so every
+        // post was discarded and the feed parsed to zero items while the feed
+        // itself was perfectly valid. The same shape appears in other
+        // microblog and status feeds.
+        //
+        // Identity does not depend on it (see Identity.resolve, which hashes
+        // title+date only as a last resort), and the UI shows the summary, so
+        // an empty title is carried through rather than being grounds to throw
+        // the item away. Dropping content is the one thing a reader must not do.
+        val title = child("title")?.text()?.trim()?.takeIf { it.isNotEmpty() } ?: ""
         val published = dateFor(el, atom)
 
         val link = if (atom) {

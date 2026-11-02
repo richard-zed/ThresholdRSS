@@ -73,8 +73,19 @@ import dev.daisy.core.Item
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * How long a removed feed's row is left alone before it is actually deleted.
+ *
+ * The row is swiped away by [SwipeToDismissBox], which animates. Deleting from
+ * the list at the same moment cancels that animation, because the row stops
+ * existing part-way through it. Holding the delete back for the animation's own
+ * duration lets the row finish leaving before it is told to go.
+ */
+private const val REMOVE_ANIMATION_MS = 500L
 
 /**
  * The root of the UI: entries, the feed list, and the add flow.
@@ -401,24 +412,34 @@ private fun FeedPickerScreen(
             // edge exactly when there are feeds to export.
             LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                 items(state.feeds, key = { "feed-${it.id}" }) { feed ->
+                    val scope = rememberCoroutineScope()
+                    var committed by remember(feed.id) { mutableStateOf(false) }
                     val dismissState = rememberSwipeToDismissBoxState(
-                        // Destructive, so a swipe alone does not commit it: the
-                        // row springs back and the delete runs only once the
-                        // user is far enough past the edge to have meant it.
+                        // Destructive, so a swipe alone does not commit it:
+                        // returning TRUE tells the box the row really is
+                        // dismissed, which parks it off-screen and lets it play
+                        // its dismissal instead of bouncing back.
                         //
-                        // Returning true is what made the removal feel broken:
-                        // it tells the box the row IS swiped away, so the row
-                        // stays parked off-screen while removeFeed does disk
-                        // work in a coroutine -- a long pause with the row gone
-                        // but its space still occupied -- and then the whole
-                        // list jumps when state finally arrives. Committing
-                        // here means the row springs back and disappears in the
-                        // same frame the new list lands.
+                        // The delete is then held back for the animation, so the
+                        // row leaves on its own rather than blinking out mid
+                        // slide. The row is removed from the list only when the
+                        // body actually runs, and `committed` stops a second
+                        // callback firing it twice.
                         confirmValueChange = { value ->
-                            if (value == SwipeToDismissBoxValue.EndToStart) {
-                                onRemoveFeed(feed.id)
+                            if (value == SwipeToDismissBoxValue.EndToStart && !committed) {
+                                committed = true
+                                scope.launch {
+                                    // Matches the dismissal's own duration; the
+                                    // shorter of the two would cut it off
+                                    // half-way and the longer would show a gap
+                                    // where a row used to be.
+                                    delay(REMOVE_ANIMATION_MS)
+                                    onRemoveFeed(feed.id)
+                                }
+                                true
+                            } else {
+                                value != SwipeToDismissBoxValue.EndToStart
                             }
-                            false
                         },
                     )
 
@@ -928,15 +949,20 @@ internal fun ItemRow(
             }
 
             Column(Modifier.weight(1f)) {
+                // A post has no title; its text IS the title. Feeds that omit
+                // <title> entirely (Mastodon and other status feeds) would
+                // otherwise render a wall of "(untitled)". Use the body as the
+                // headline and then do not print it twice underneath.
+                val body = plain(item.summary)
+                val headlined = item.title.ifBlank { body }
                 Text(
-                    text = item.title.ifBlank { "(untitled)" },
+                    text = headlined.ifBlank { "(untitled)" },
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
 
-                val body = plain(item.summary)
-                if (body.isNotEmpty()) {
+                if (body.isNotEmpty() && body != headlined) {
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = body,

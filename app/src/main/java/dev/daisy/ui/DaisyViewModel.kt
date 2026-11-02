@@ -503,17 +503,22 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
      * because each feed owns its own file. The read-back runs under the same
      * lock as the writes, so the list published here is the list just written.
      */
+    /**
+     * Remove a feed.
+     *
+     * The list is NOT edited optimistically. An earlier version filtered the
+     * feed out of the published state before touching disk, which gave
+     * animateItem() nothing to animate -- the row simply vanished -- and raced
+     * the write: two quick removals could re-read a snapshot taken before the
+     * second and publish the first feed straight back.
+     *
+     * All the waiting lives in the UI instead (DaisyApp's confirmValueChange
+     * holds the call back for the dismissal's duration), so by the time this
+     * runs the row has already played its animation. What is left is the disk
+     * work, done under writeLock and published from the read that follows it, so
+     * concurrent removals serialise rather than overwrite each other.
+     */
     fun removeFeed(feedId: Long) {
-        // Drop it from the published list IMMEDIATELY, before touching disk.
-        // The delete below is synchronous file work plus a full list rewrite,
-        // and waiting for it left the row sitting there through the whole
-        // operation -- the swipe looked like it had not taken. Publishing the
-        // removal first makes the row leave on the next frame; the disk work
-        // then confirms it, and the re-read at the end replaces the guess with
-        // the truth. If the delete fails the next sync puts the feed back.
-        _state.update { st ->
-            st.copy(feeds = st.feeds.filterNot { it.id == feedId })
-        }
         viewModelScope.launch {
             // The re-read happens INSIDE the lock, and the state is published
             // from that read.

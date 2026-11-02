@@ -1,6 +1,7 @@
 package dev.daisy.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,8 +48,33 @@ class FeedParseTest {
     }
 
     @Test
-    fun `an item with no title is dropped`() {
-        assertTrue(items(rss("<item><guid>x</guid></item>")).isEmpty())
+    fun `an item with no title is kept, not dropped`() {
+        // This test used to assert the opposite. Mastodon -- and status feeds
+        // generally -- emit no <title> at all: a post is guid, link, pubDate
+        // and description. Dropping titleless entries discarded every post and
+        // left the feed parsing to zero items while the feed itself was valid.
+        val i = items(rss("<item><guid>x</guid></item>")).single()
+        assertEquals("", i.title)
+        assertEquals("x", i.guid)
+    }
+
+    @Test
+    fun `a mastodon post parses with its body and no title`() {
+        // The real shape, trimmed: no title, a guid that is the permalink, an
+        // HTML-escaped description.
+        val xml = """
+            <item>
+              <guid isPermaLink="true">https://mastodon.social/@Gargron/117537962651248889</guid>
+              <link>https://mastodon.social/@Gargron/117537962651248889</link>
+              <pubDate>Sat, 31 Oct 2026 22:49:38 +0000</pubDate>
+              <description>&lt;p&gt;Somewhere nice.&lt;/p&gt;</description>
+            </item>
+        """.trimIndent()
+        val i = items(rss(xml)).single()
+        assertEquals("", i.title)
+        assertEquals("https://mastodon.social/@Gargron/117537962651248889", i.guid)
+        assertTrue("expected a body, got ${i.summary}", i.summary!!.contains("Somewhere nice"))
+        assertNotNull(i.published)
     }
 
     @Test
