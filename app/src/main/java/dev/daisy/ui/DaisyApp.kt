@@ -3,7 +3,6 @@ package dev.daisy.ui
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -759,26 +758,23 @@ private fun FeedPickerScreen(
                                 )
                             },
                             leadingContent = {
-                                // Same rule as the article footer: an absent
-                                // favicon keeps the slot rather than closing
-                                // the gap and sliding the title over.
-                                val leadMod = Modifier
-                                    .size(24.dp)
-                                    .clip(CircleShape)
-                                if (!feed.faviconUrl.isNullOrBlank()) {
-                                    AsyncImage(
-                                        model = feed.faviconUrl,
-                                        contentDescription = null,
-                                        modifier = leadMod,
-                                    )
-                                } else {
-                                    Image(
-                                        painter = painterResource(R.drawable.ic_daisy),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = leadMod,
-                                    )
-                                }
+                                // `error` and `fallback` both point at the
+                                // daisy mark, so the slot is never blank.
+                                // faviconFor always builds a Google URL for
+                                // any feed with a host, so a null model is
+                                // rare -- what actually happens is the
+                                // service returning 404 for a site with no
+                                // icon, which lands in `error` and which a
+                                // null check alone would miss.
+                                AsyncImage(
+                                    model = feed.faviconUrl,
+                                    contentDescription = null,
+                                    error = painterResource(R.drawable.ic_daisy),
+                                    fallback = painterResource(R.drawable.ic_daisy),
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape),
+                                )
                             },
                             // A visible handle, because the drag is otherwise
                             // undiscoverable: a long-press that reorders
@@ -1283,27 +1279,21 @@ internal fun ItemRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Feed identity, one line: icon, name, then the time pushed right
             // so it lines up down the column regardless of name length.
-            // Always drawn. A null favicon used to render nothing at
-            // all, so the circle vanished and every name shifted left by
-            // 20dp; the placeholder keeps the column aligned.
-            val favMod = Modifier
-                .size(14.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onFeedClick)
-            if (!faviconUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = faviconUrl,
-                    contentDescription = null,
-                    modifier = favMod,
-                )
-            } else {
-                Image(
-                    painter = painterResource(R.drawable.ic_daisy),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = favMod,
-                )
-            }
+            // Always drawn. `error` catches a favicon that 404s (a site
+            // with no icon makes the Google service return 404, which Coil
+            // reports as an error and AsyncImage renders as nothing), and
+            // `fallback` catches a null model, so the slot is never empty
+            // and the feed name never shifts.
+            AsyncImage(
+                model = faviconUrl,
+                contentDescription = null,
+                error = painterResource(R.drawable.ic_daisy),
+                fallback = painterResource(R.drawable.ic_daisy),
+                modifier = Modifier
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onFeedClick),
+            )
             Spacer(Modifier.width(6.dp))
             if (feedTitle.isNotEmpty()) {
                 Text(
