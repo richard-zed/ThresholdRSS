@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+
+    <!-- Badge. The SVG uses a green->teal gradient; Android vectors have no
+         gradient brush, so this is the mid stop (#14b667) flattened. -->
+    <path
+        android:fillColor="#14b667"
+        android:pathData="M60,10 a50,50 0 1,0 0.01,0 z" />
+
+    <!-- White quarter rings, drawn exactly as authored in daisy.svg.
+         Both are 12 o'clock -> 3 o'clock arcs with stroke-width 10. -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="butt"
+        android:fillColor="#00000000"
+        android:pathData="M 30,35 A 55,55 0 0 1 85,90" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="butt"
+        android:fillColor="#00000000"
+        android:pathData="M 30,55 A 35,35 0 0 1 65,90" />
+
+    <!-- The yellow dot. -->
+    <path
+        android:fillColor="#E8E833"
+        android:pathData="M39,72 a9,9 0 1,0 0.01,0 z" />
+</vector>

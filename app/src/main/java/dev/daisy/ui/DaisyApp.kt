@@ -3,6 +3,7 @@ package dev.daisy.ui
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -72,6 +73,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -79,6 +81,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.daisy.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
@@ -755,14 +758,25 @@ private fun FeedPickerScreen(
                                     },
                                 )
                             },
-                            leadingContent = feed.faviconUrl?.let { href ->
-                                {
+                            leadingContent = {
+                                // Same rule as the article footer: an absent
+                                // favicon keeps the slot rather than closing
+                                // the gap and sliding the title over.
+                                val leadMod = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                if (!feed.faviconUrl.isNullOrBlank()) {
                                     AsyncImage(
-                                        model = href,
+                                        model = feed.faviconUrl,
                                         contentDescription = null,
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .clip(CircleShape),
+                                        modifier = leadMod,
+                                    )
+                                } else {
+                                    Image(
+                                        painter = painterResource(R.drawable.ic_daisy),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = leadMod,
                                     )
                                 }
                             },
@@ -1269,17 +1283,28 @@ internal fun ItemRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Feed identity, one line: icon, name, then the time pushed right
             // so it lines up down the column regardless of name length.
+            // Always drawn. A null favicon used to render nothing at
+            // all, so the circle vanished and every name shifted left by
+            // 20dp; the placeholder keeps the column aligned.
+            val favMod = Modifier
+                .size(14.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onFeedClick)
             if (!faviconUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = faviconUrl,
                     contentDescription = null,
-                    modifier = Modifier
-                        .size(14.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onFeedClick),
+                    modifier = favMod,
                 )
-                Spacer(Modifier.width(6.dp))
+            } else {
+                Image(
+                    painter = painterResource(R.drawable.ic_daisy),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = favMod,
+                )
             }
+            Spacer(Modifier.width(6.dp))
             if (feedTitle.isNotEmpty()) {
                 Text(
                     text = feedTitle,

@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="120"
+   height="120"
+   viewBox="0 0 120 120"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   sodipodi:docname="daisy.svg"
+   inkscape:export-filename="shirt0000.png"
+   inkscape:export-xdpi="384"
+   inkscape:export-ydpi="384"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="false"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#505050"
+     inkscape:document-units="px"
+     labelstyle="default"
+     inkscape:clip-to-page="false"
+     showguides="true"
+     showgrid="false"
+     inkscape:zoom="5.744886"
+     inkscape:cx="120.36792"
+     inkscape:cy="86.946895"
+     inkscape:window-width="1912"
+     inkscape:window-height="1012"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1">
+    <sodipodi:guide
+       position="501.30703,4514.5672"
+       orientation="1,0"
+       id="guide1"
+       inkscape:locked="false" />
+    <inkscape:grid
+       id="grid1"
+       units="px"
+       originx="0"
+       originy="0"
+       spacingx="1"
+       spacingy="1"
+       empcolor="#0099e5"
+       empopacity="0.30196078"
+       color="#0099e5"
+       opacity="0.14901961"
+       empspacing="5"
+       enabled="true"
+       visible="false" />
+  </sodipodi:namedview>
+  <defs
+     id="defs1">
+    <linearGradient
+       id="linearGradient1"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#0d7945;stop-opacity:1;"
+         offset="0"
+         id="stop1" />
+      <stop
+         style="stop-color:#14b667;stop-opacity:0.85989958;"
+         offset="0.37630734"
+         id="stop3" />
+      <stop
+         style="stop-color:#17acae;stop-opacity:1;"
+         offset="1"
+         id="stop2" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1"
+       id="linearGradient2"
+       x1="60"
+       y1="110"
+       x2="60"
+       y2="10"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <circle
+       style="fill:url(#linearGradient2);stroke-width:3;stroke:none;stroke-opacity:1;stroke-dasharray:none"
+       id="path1"
+       cx="60"
+       cy="60"
+       r="50" />
+    <circle
+       style="fill:#e8e833;fill-opacity:1;stroke:none;stroke-width:1.125;stroke-dasharray:none;stroke-opacity:1"
+       id="path3"
+       cx="39"
+       cy="81"
+       r="9" />
+    <path
+       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10;stroke-dasharray:none;stroke-opacity:1"
+       id="path6"
+       sodipodi:type="arc"
+       sodipodi:cx="30"
+       sodipodi:cy="90"
+       sodipodi:rx="55"
+       sodipodi:ry="55"
+       sodipodi:start="4.712389"
+       sodipodi:end="0"
+       sodipodi:arc-type="arc"
+       d="M 30,35 A 55,55 0 0 1 85,90"
+       sodipodi:open="true" />
+    <path
+       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10;stroke-dasharray:none;stroke-opacity:1"
+       id="path6-3"
+       sodipodi:type="arc"
+       sodipodi:cx="30"
+       sodipodi:cy="90"
+       sodipodi:rx="35"
+       sodipodi:ry="35"
+       sodipodi:start="4.712389"
+       sodipodi:end="0"
+       sodipodi:arc-type="arc"
+       d="M 30,55 A 35,35 0 0 1 65,90"
+       sodipodi:open="true" />
+  </g>
+</svg>
