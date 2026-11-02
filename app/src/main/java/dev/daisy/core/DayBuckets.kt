@@ -36,12 +36,20 @@ object DayBuckets {
             }
         }
 
+        // Undated items must not SPLIT a day. The old code flushed the open
+        // day on a null and set the marker back to null; the next dated item
+        // then saw start != null, flushed an empty bucket and REPOPENED the
+        // same day -- two buckets with one dayStart. The list keys separators
+        // on dayStart, so that is a duplicate-key crash in the measure pass,
+        // which is what refreshing two feeds started hitting.
+        //
+        // A null therefore does not end a day. It joins whatever is open, and
+        // only starts a trailing bucket when nothing is open (a leading run of
+        // undated items, which the caller sorts last).
         for (it in items) {
             val p = it.published
             if (p == null) {
                 // Should not happen post-stamp. Defensive: keep it, trailing.
-                if (currentStart != null) flush()
-                currentStart = null
                 current.add(it)
                 continue
             }

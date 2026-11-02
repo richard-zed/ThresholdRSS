@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -244,10 +245,16 @@ private fun FeedListScreen(
                 state.isEmpty -> EmptyState()
 
                 else -> LazyColumn(Modifier.fillMaxSize()) {
-                    items(
+                    itemsIndexed(
                         state.buckets,
-                        key = { "day-${it.dayStart}" },
-                    ) { bucket ->
+                        // Index-suffixed ON PURPOSE. A bucket key must be
+                        // unique or the measure pass throws, and a duplicate
+                        // day is a data problem (DayBuckets no longer emits
+                        // one, but a future caller can) -- a stutter in the
+                        // list is survivable, a crash is not. Two headers is a
+                        // visible symptom; the duplicate-key exception is not.
+                        key = { i, b -> "day-${b.dayStart}-$i" },
+                    ) { _, bucket ->
                         DayHeader(bucket.dayStart)
                         // Kotlin resolves an unqualified items() inside the
                         // outer items() block against LazyItemScope, which has
