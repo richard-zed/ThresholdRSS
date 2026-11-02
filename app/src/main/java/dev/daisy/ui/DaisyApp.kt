@@ -59,6 +59,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -512,16 +513,40 @@ private fun FeedPickerScreen(
                     // cannot be smart-cast, so read it into a val first.
                     // true = line on this row's top edge, false = bottom edge,
                     // null = no line.
+                    //
+                    // dropIndex is ONE index for the whole list, so every row
+                    // sees the same value. Each row must therefore test whether
+                    // the gap lands exactly on its own boundary, not whether it
+                    // is above or below the gap -- comparing with < / else lit
+                    // an edge on EVERY row, which is what this got wrong first.
+                    //
+                    // The gap sits between row n-1 and row n at boundary n, so
+                    // boundary n == this row's top edge, and boundary n+1 ==
+                    // this row's bottom edge.
+                    //
+                    // Landing back at index is no move, and it is covered by
+                    // this: boundary `index` draws only the bottom of the row
+                    // ABOVE (index-1), so the held row's own slot shows nothing.
+                    //
+                    // Local capture: dropIndex is a var from an outer scope and
+                    // cannot be smart-cast, so read it into a val first.
                     val target = dropIndex
                     // Captured here, not inside drawWithContent: that lambda
                     // runs in DrawScope and is not @Composable, so reading
                     // MaterialTheme inside it does not compile.
                     val markerColor = MaterialTheme.colorScheme.primary
+                    val isLastRow = index == state.feeds.lastIndex
+                    //
+                    // target is the FINAL index the held row will occupy, not
+                    // a gap number. Dropping below everything gives the
+                    // last index, whose gap is the bottom of the list -- so the
+                    // last row checks for that case separately, or the line
+                    // would sit above it while the row lands beneath it.
                     val gapAtTop: Boolean? = when {
                         draggingKey == null || target == null -> null
-                        target == index -> null
-                        target < index -> true
-                        else -> false
+                        !isLastRow && target == index -> true
+                        isLastRow && target == index -> false
+                        else -> null
                     }
                     // Shift accumulated while dragging, converted back to an
                     // index step. Kept in a plain float rather than snapping to
@@ -590,6 +615,13 @@ private fun FeedPickerScreen(
                         modifier = Modifier
                             .animateItem()
                             .zIndex(if (isDragging) 1f else 0f)
+                            // Translucent while held, so the insertion line on
+                            // the row underneath stays visible. graphicsLayer
+                            // rather than a background alpha: it fades the
+                            // whole row including its icon and text, and it is
+                            // a draw-time property, so it cannot cause the
+                            // layout to re-measure mid-drag.
+                            .graphicsLayer { alpha = if (isDragging) 0.75f else 1f }
                             .offset { IntOffset(0, nudge.roundToInt()) }
                             // Keyed on index as well as id: the lambda closes
                             // over `index`, and after a reorder every row's
