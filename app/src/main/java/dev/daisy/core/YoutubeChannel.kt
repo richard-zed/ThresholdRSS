@@ -57,7 +57,17 @@ object YoutubeChannel {
         val first = path.split('/').firstOrNull { it.isNotEmpty() } ?: return false
         // Anything else at the top of a YouTube path is a video, a playlist or
         // the front page -- none of which is a channel.
-        return first.startsWith("@") || first == "c" || first == "user" || first == "channel"
+        // "users" (plural) is not a real YouTube path, but it is what people
+        // type, and leaving it out meant no candidate was generated for the
+        // page -- so discovery fell through to the url as given and subscribed
+        // to an error page as an empty feed. Any of these prefixes marks the
+        // url as a channel ATTEMPT, which is what stops the fall-through; the
+        // resolution below then decides whether a real channel id exists.
+        return first.startsWith("@") ||
+            first == "c" ||
+            first == "user" ||
+            first == "users" ||
+            first == "channel"
     }
 
     /**

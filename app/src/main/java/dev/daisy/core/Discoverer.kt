@@ -166,6 +166,10 @@ class Discoverer(
                     // `outcome()` says the request succeeded, `looksLikeFeed` says
                     // the body IS a feed. Only the second one ends the walk.
                     if (FeedSniffer.looksLikeFeed(result.body)) {
+                        // Accepted only on the body being a feed, never on the
+                        // request having succeeded -- a soft-404 or captcha page
+                        // still returns Ok. This is what keeps an AS_GIVEN
+                        // candidate honest, since it is otherwise unconditional.
                         return finish(
                             DiscoverState.Found(result.finalUrl, feedTitle(result.body)),
                             onState,
@@ -184,11 +188,20 @@ class Discoverer(
                         if (id != null) plan.promote(listOf(YoutubeChannel.feedUrl(id)))
                     }
 
-                    // Not a feed. If it is HTML it may still name the feed.
-                    // Only the body is scanned: FetchResult.Ok does not carry
-                    // response headers, so the Link: header path is unreachable
-                    // until it does. Better absent than a stub that quietly
-                    // contributes nothing.
+                    // Not a feed. A YouTube page that named no channel id is a
+                    // dead end, not a candidate to keep walking past: the next
+                    // candidate is the url the user typed, and subscribing to
+                    // that is how `youtube.com/users/@name` became an empty
+                    // feed. Stop here and report it.
+                    if (UrlCandidates.isYoutube(candidate.url)) {
+                        return finish(DiscoverState.NotFound(plan.attempts), onState)
+                    }
+
+                    // If it is HTML it may still name the feed. Only the body is
+                    // scanned: FetchResult.Ok does not carry response headers,
+                    // so the Link: header path is unreachable until it does.
+                    // Better absent than a stub that quietly contributes
+                    // nothing.
                     val advertised = LinkDiscovery.rssLinksFrom(result.body, result.finalUrl)
                     if (advertised.isNotEmpty()) plan.promote(advertised)
                 }

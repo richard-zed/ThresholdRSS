@@ -1,5 +1,7 @@
 package dev.daisy.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -30,13 +32,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import dev.daisy.core.DiscoverState
 import dev.daisy.core.Item
 import java.text.DateFormat
@@ -69,6 +76,8 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
             onDismissDiscover = vm::dismissDiscover,
             onOpenFeed = { openFeedId = it },
             onRemoveFeed = vm::removeFeed,
+            onImportOpml = vm::importOpml,
+            onExportOpml = vm::exportOpml,
         )
     }
 }
@@ -82,9 +91,53 @@ private fun FeedListScreen(
     onDismissDiscover: () -> Unit,
     onOpenFeed: (Long) -> Unit,
     onRemoveFeed: (Long) -> Unit,
+    onImportOpml: (String) -> Unit,
+    onExportOpml: (suspend () -> String),
 ) {
     var adding by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
+
+    // OPML import. The file is read here and the TEXT handed to the view model,
+    // so the view model needs no ContentResolver and stays testable.
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val body = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use {
+                        it.readBytes().decodeToString()
+                    }
+                }.getOrNull()
+            }
+            if (body == null) {
+                snackbar.showSnackbar("Could not read that file")
+            } else {
+                onImportOpml(body)
+            }
+        }
+    }
+
+    // Export. Same shape: the view model produces the document, this writes it.
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/x-opml"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val body = onExportOpml()
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use {
+                        it.write(body.encodeToByteArray())
+                    }
+                }.isSuccess
+            }
+            snackbar.showSnackbar(if (ok) "Exported" else "Could not write that file")
+        }
+    }
 
     // One-shot: showing the message and clearing the field is what stops it
     // re-firing on the next recomposition.
@@ -116,6 +169,18 @@ private fun FeedListScreen(
                         TextButton(onClick = onSync) { Text("Refresh") }
                     }
                     TextButton(onClick = { adding = true }) { Text("Add") }
+                    // Import/Export rather than icons: material-icons is not a
+                    // dependency, and labels cost less to explain than glyphs.
+                    TextButton(onClick = { importLauncher.launch(arrayOf("*/*")) }) {
+                        Text("Import")
+                    }
+                    TextButton(
+                        onClick = {
+                            exportLauncher.launch("daisy-subscriptions.opml")
+                        },
+                    ) {
+                        Text("Export")
+                    }
                 },
             )
         },
@@ -230,14 +295,24 @@ private fun FeedListScreen(
                                 Text(detail, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             },
                             trailingContent = {
-                                Text(
-                                    "Remove",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier
-                                        .clickable { onRemoveFeed(feed.id) }
-                                        .padding(8.dp),
-                                )
+                                // TextButton rather than a Text with clickable.
+                                // Compose delivers the touch to the child first, so
+                                // the original did receive taps -- but a bare Text
+                                // with clickable gets only the width of the word as
+                                // its touch target, and a TextButton has the 48dp
+                                // minimum plus a ripple, so a tap that misses the
+                                // glyph by a few dp now still lands.
+                                //
+                                // No icon: material-icons was deliberately left out
+                                // of the build, and pulling it in for one glyph is
+                                // not worth it.
+                                TextButton(onClick = { onRemoveFeed(feed.id) }) {
+                                    Text(
+                                        "Remove",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
                             },
                             modifier = Modifier.clickable { onOpenFeed(feed.id) },
                         )
