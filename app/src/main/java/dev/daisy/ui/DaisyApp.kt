@@ -416,15 +416,30 @@ private fun FeedPickerScreen(
                                 Text(feed.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             },
                             supportingContent = {
+                                // A failing feed says so here rather than only
+                                // on its rows: the picker is where a broken
+                                // feed is diagnosed, and "Checked 3:41 PM"
+                                // reads as healthy even when every refresh
+                                // has thrown since. Failure wins over the
+                                // timestamp because the timestamp is not the
+                                // thing the user needs to know.
+                                val failure = state.failures[feed.id]
                                 Text(
-                                    feed.lastFetched?.let { stamp ->
-                                        "Checked " + DateFormat.getDateTimeInstance(
-                                            DateFormat.SHORT,
-                                            DateFormat.SHORT,
-                                        ).format(Date(stamp))
-                                    } ?: "Never checked",
+                                    failure
+                                        ?: feed.lastFetched?.let { stamp ->
+                                            "Checked " + DateFormat.getDateTimeInstance(
+                                                DateFormat.SHORT,
+                                                DateFormat.SHORT,
+                                            ).format(Date(stamp))
+                                        }
+                                        ?: "Never checked",
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
+                                    color = if (failure != null) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
                                 )
                             },
                             leadingContent = feed.faviconUrl?.let { href ->
