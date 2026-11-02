@@ -5,10 +5,9 @@
     show as a ring.
 
     Transcribed from daisy.svg at 108x108. The SVG gradient carries a
-    gradientTransform of matrix(1.08,0,0,1.08,-10.8,-10.8), which maps its
+    gradientTransform of matrix(1.08,0,0,1.08,-10.8,-10.8), which resolves its
     y1=110/y2=10 onto user-space y=108/y=0; the stops below use those resolved
-    coordinates rather than the untransformed ones, so the ramp spans the full
-    badge height.
+    coordinates, so the ramp spans the full badge height.
 
     Scaled 0.667 into the 72dp safe zone, offset 18.
 -->
@@ -49,17 +48,17 @@
             android:fillColor="#00000000"
             android:pathData="M 22,27.333351 A 58.666649,58.666664 0 0 1 80.666649,86.000015" />
 
-        <!-- Inner quarter ring: stroke 10.6667. -->
+        <!-- Inner quarter ring: stroke 10.5, radius 36.75. -->
         <path
             android:strokeColor="#FFFFFF"
-            android:strokeWidth="10.6667"
+            android:strokeWidth="10.5"
             android:strokeLineCap="butt"
             android:fillColor="#00000000"
-            android:pathData="M 22,48.666683 A 37.333324,37.333332 0 0 1 59.333324,86.000015" />
+            android:pathData="M 22,49.250015 A 36.749985,36.749992 0 0 1 58.749985,86.000008" />
 
-        <!-- Yellow dot: r=9.6 at (31.6, 76.4). -->
+        <!-- Yellow dot: r=10 at (32, 76). -->
         <path
             android:fillColor="#E8E833"
-            android:pathData="M31.6,66.8 a9.6,9.6 0 1,0 0.01,0 z" />
+            android:pathData="M32,66 a10,10 0 1,0 0.01,0 z" />
     </group>
 </vector>

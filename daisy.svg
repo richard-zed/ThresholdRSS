@@ -31,9 +31,9 @@
      inkscape:clip-to-page="false"
      showguides="true"
      showgrid="false"
-     inkscape:zoom="3.0184937"
-     inkscape:cx="123.40592"
-     inkscape:cy="33.294753"
+     inkscape:zoom="4.6220684"
+     inkscape:cx="92.274705"
+     inkscape:cy="35.15742"
      inkscape:window-width="1912"
      inkscape:window-height="1012"
      inkscape:window-x="0"
@@ -100,12 +100,12 @@
        cy="54"
        r="54" />
     <ellipse
-       style="fill:#e8e833;fill-opacity:1;stroke:none;stroke-width:1.2;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:#e8e833;fill-opacity:1;stroke:none;stroke-width:1.25;stroke-dasharray:none;stroke-opacity:1"
        id="path3"
-       cx="31.599997"
-       cy="76.400017"
-       rx="9.5999966"
-       ry="9.5999994" />
+       cx="32"
+       cy="76"
+       rx="10"
+       ry="10.000003" />
     <path
        style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.6667;stroke-dasharray:none;stroke-opacity:1"
        id="path6"
@@ -120,17 +120,17 @@
        d="M 22,27.333351 A 58.666649,58.666664 0 0 1 80.666649,86.000015"
        sodipodi:open="true" />
     <path
-       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.6667;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.5;stroke-dasharray:none;stroke-opacity:1"
        id="path6-3"
        sodipodi:type="arc"
        sodipodi:cx="22"
-       sodipodi:cy="86.000015"
-       sodipodi:rx="37.333324"
-       sodipodi:ry="37.333332"
+       sodipodi:cy="86.000008"
+       sodipodi:rx="36.749985"
+       sodipodi:ry="36.749992"
        sodipodi:start="4.712389"
        sodipodi:end="0"
        sodipodi:arc-type="arc"
-       d="M 22,48.666683 A 37.333324,37.333332 0 0 1 59.333324,86.000015"
+       d="M 22,49.250015 A 36.749985,36.749992 0 0 1 58.749985,86.000008"
        sodipodi:open="true" />
   </g>
 </svg>
