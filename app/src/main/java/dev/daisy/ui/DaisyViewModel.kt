@@ -158,16 +158,27 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
     fun sync() {
         if (_state.value.syncing) return
         val filter = _state.value.feedFilterId
-        val feeds = _state.value.feeds.let { all ->
-            if (filter == null) all else all.filter { it.id == filter }
-        }
-        if (feeds.isEmpty()) {
-            _state.update { it.copy(message = "No feeds yet") }
-            return
-        }
 
         viewModelScope.launch {
             _state.update { it.copy(syncing = true, message = null) }
+            // The feed list is read from DISK here, under the lock, not off
+            // state before the coroutine starts. subscribe() writes meta.json
+            // and the state publish that follows it is a separate update, so
+            // a refresh fired immediately after adding a feed could capture
+            // the pre-add list from state, find nothing new to fetch, and
+            // skip the feed it was asked about. It worked on the second try
+            // because state had caught up by then. Disk under the lock is the
+            // only read that cannot be behind a pending write.
+            val feeds = withContext(Dispatchers.IO) {
+                writeLock.withLock {
+                    val all = store.loadFeeds()
+                    if (filter == null) all else all.filter { it.id == filter }
+                }
+            }
+            if (feeds.isEmpty()) {
+                _state.update { it.copy(message = "No feeds yet", syncing = false) }
+                return@launch
+            }
             try {
                 runSync(feeds)
             } finally {
@@ -546,6 +557,10 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
         }
         _state.update {
             it.copy(
+                // feeds as well as buckets. Publishing only the buckets left
+                // state.feeds missing every imported feed, so callers reading
+                // the subscription list -- the picker, and any code deciding
+                // what to fetch -- saw the pre-import list.
                 feeds = snapshot.first,
                 buckets = snapshot.second,
                 loading = false,

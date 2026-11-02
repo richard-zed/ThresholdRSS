@@ -26,11 +26,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -125,11 +123,15 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
             onDismissDiscover = vm::dismissDiscover,
             onImportOpml = { body -> vm.importOpml(body) },
             onBack = { screen = Screen.All },
+            onShowAll = {
+                vm.selectFeed(null)
+                screen = Screen.All
+            },
+            onShowFeeds = { screen = Screen.Feeds },
         )
 
         screen is Screen.Feeds -> FeedPickerScreen(
             state = state,
-            onBack = { screen = Screen.All },
             onShowAll = {
                 vm.selectFeed(null)
                 screen = Screen.All
@@ -140,6 +142,7 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
             },
             onRemoveFeed = vm::removeFeed,
             onExportOpml = { vm.exportOpml() },
+            onShowAdd = { screen = Screen.Add },
         )
 
         else -> FeedListScreen(
@@ -222,66 +225,12 @@ private fun FeedListScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            // Compact by hand rather than NavigationBar: the stock bar pads
-            // ~80dp tall with generous horizontal insets on every item, which
-            // is a lot of chrome for three destinations on a phone. 56dp
-            // matches a Material toolbar and keeps the icons thumb-sized.
-            // The background has to be applied BEFORE navigationBarsPadding,
-            // not after. Modifier order is outside-in: with the padding first,
-            // the padding pushes the background (and the 56dp content) up out
-            // of the gesture area, leaving a transparent strip from the bar's
-            // bottom edge to the screen bottom. Drawing the background first
-            // and letting the inset expand the box inside it makes the tint
-            // run to the physical bottom while the icons stay above the
-            // gesture handle.
-            //
-            // For the same reason .height(56.dp) is followed by insetsPadding,
-            // not the other way round: height sets the CONTENT row, and the
-            // insets are added on top of that height rather than eaten from it.
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainer),
-            ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .height(56.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Home replaces the back arrow that used to appear only on a
-                // filtered feed. Two buttons doing "return to everything" in
-                // two different ways depending on where you were was the
-                // janky part -- one destination, always present, always in the
-                // same place, reads better and is one fewer special case.
-                BarTab(
-                    label = "Feeds",
-                    selected = oneFeed != null,
-                    onClick = onShowFeeds,
-                    modifier = Modifier.weight(1f),
-                ) { tint ->
-                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = tint)
-                }
-                BarTab(
-                    label = "Home",
-                    selected = oneFeed == null && screen is Screen.All,
-                    onClick = onShowAll,
-                    modifier = Modifier.weight(1f),
-                ) { tint ->
-                    Icon(Icons.Filled.Home, contentDescription = null, tint = tint)
-                }
-                BarTab(
-                    label = "Add",
-                    selected = false,
-                    onClick = onShowAdd,
-                    modifier = Modifier.weight(1f),
-                ) { tint ->
-                    Icon(Icons.Filled.Add, contentDescription = null, tint = tint)
-                }
-
-            }
-            }
+            DestinationBar(
+                current = screen,
+                onShowFeeds = onShowFeeds,
+                onShowAll = onShowAll,
+                onShowAdd = onShowAdd,
+            )
         },
     ) { padding ->
         PullToRefreshBox(
@@ -389,8 +338,8 @@ private fun FeedListScreen(
 @Composable
 private fun FeedPickerScreen(
     state: UiState,
-    onBack: () -> Unit,
     onShowAll: () -> Unit,
+    onShowAdd: () -> Unit,
     onOpenFeed: (Long) -> Unit,
     onRemoveFeed: (Long) -> Unit,
     onExportOpml: suspend () -> String,
@@ -418,12 +367,21 @@ private fun FeedPickerScreen(
         }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
-        // A Column so the back row can sit above the scroll container.
-        // Inside the LazyColumn it would scroll away, and a back affordance
-        // you have to scroll up to find is not one.
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
+        // The same bar as every other top-level screen. "Back" was a row of
+        // text that only this screen had; the bar's Home tab does the same
+        // job in the place the user already looks for it.
+        bottomBar = {
+            DestinationBar(
+                current = Screen.Feeds,
+                onShowFeeds = {},
+                onShowAll = onShowAll,
+                onShowAdd = onShowAdd,
+            )
+        },
+    ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-        BackRow(label = "All entries", onClick = onBack)
         if (state.feeds.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
                 Text("No feeds yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -525,17 +483,16 @@ private fun FeedPickerScreen(
             // subscriptions as a whole, which is what this screen lists, and
             // it is a one-off action -- a bare action next to three
             // destinations is what made the bar read wrong.
+            // Import and export are the same action in two directions, so
+            // they get the same treatment: a divider, then a full-width
+            // button at one height. Export used to carry an icon and a fixed
+            // height while import was bare, which made two halves of one
+            // feature look like two unrelated controls.
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             TextButton(
                 onClick = { exportLauncher.launch("daisy-subscriptions.opml") },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
-                Icon(
-                    Icons.Filled.Share,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
                 Text("Export subscriptions")
             }
         }
@@ -564,6 +521,8 @@ private fun AddFeedScreen(
     onDismissDiscover: () -> Unit,
     onImportOpml: suspend (String) -> Unit,
     onBack: () -> Unit,
+    onShowAll: () -> Unit,
+    onShowFeeds: () -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
@@ -596,13 +555,20 @@ private fun AddFeedScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = {
+            DestinationBar(
+                current = Screen.Add,
+                onShowFeeds = onShowFeeds,
+                onShowAll = onShowAll,
+                onShowAdd = {},
+            )
+        },
     ) { padding ->
         Column(
             Modifier
                 .padding(padding)
                 .fillMaxSize(),
         ) {
-            BackRow(label = "All entries", onClick = onBack)
             Column(Modifier.padding(16.dp)) {
             OutlinedTextField(
                 value = text,
@@ -706,14 +672,98 @@ private fun AddFeedScreen(
             }
 
             Spacer(Modifier.weight(1f))
-            HorizontalDivider()
-            Spacer(Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             TextButton(
                 onClick = { importLauncher.launch(arrayOf("*/*")) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
-                Text("Import from OPML file")
+                Text("Import subscriptions")
             }
+            }
+        }
+    }
+}
+
+/**
+ * The bottom bar, shared by every top-level screen.
+ *
+ * One bar rendered three times rather than three bars. The destinations do
+ * not change with the screen, only which one is lit, so a second copy would
+ * be three places to keep in step -- which is the drift this app already
+ * showed once.
+ *
+ * The current screen is passed in so `selected` is derived from one source
+ * of truth. When only the entry list had a bar, selection was inferred from
+ * a local variable the other screens did not have, which is why this could
+ * not simply be copied across.
+ *
+ * Icons only. Three labels under three icons was a lot of text on a 56dp
+ * bar, and the glyphs are unambiguous at this size. contentDescription now
+ * carries the name, so a screen reader gets the same information the
+ * visible label used to provide.
+ */
+@Composable
+private fun DestinationBar(
+    current: Screen,
+    onShowFeeds: () -> Unit,
+    onShowAll: () -> Unit,
+    onShowAdd: () -> Unit,
+) {
+    // Compact by hand rather than NavigationBar: the stock bar pads ~80dp
+    // tall with generous horizontal insets on every item, which is a lot of
+    // chrome for three destinations on a phone. 56dp matches a Material
+    // toolbar and keeps the icons thumb-sized.
+    //
+    // The background has to be applied BEFORE navigationBarsPadding, not
+    // after. Modifier order is outside-in: with the padding first, the
+    // padding pushes the background (and the 56dp content) up out of the
+    // gesture area, leaving a transparent strip from the bar's bottom edge
+    // to the screen bottom. Drawing the background first and letting the
+    // inset expand the box inside it makes the tint run to the physical
+    // bottom while the icons stay above the gesture handle.
+    //
+    // For the same reason .height(56.dp) is followed by insetsPadding, not
+    // the other way round: height sets the CONTENT row, and the insets are
+    // added on top of that height rather than eaten from it.
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainer),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .height(56.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Feeds covers a single feed's view too: opening a feed is a
+            // detail of the Feeds destination, not a fourth one, so the tab
+            // stays lit while you are inside it.
+            BarTab(
+                selected = current is Screen.Feeds || current is Screen.OneFeed,
+                onClick = onShowFeeds,
+                modifier = Modifier.weight(1f),
+            ) { tint ->
+                Icon(
+                    Icons.AutoMirrored.Filled.List,
+                    contentDescription = "Feeds",
+                    tint = tint,
+                )
+            }
+            BarTab(
+                selected = current is Screen.All,
+                onClick = onShowAll,
+                modifier = Modifier.weight(1f),
+            ) { tint ->
+                Icon(Icons.Filled.Home, contentDescription = "Home", tint = tint)
+            }
+            BarTab(
+                selected = current is Screen.Add,
+                onClick = onShowAdd,
+                modifier = Modifier.weight(1f),
+            ) { tint ->
+                Icon(Icons.Filled.Add, contentDescription = "Add feed", tint = tint)
             }
         }
     }
@@ -731,7 +781,6 @@ private fun AddFeedScreen(
  */
 @Composable
 private fun BarTab(
-    label: String,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -742,20 +791,13 @@ private fun BarTab(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Column(
+    Box(
         modifier = modifier
             .fillMaxHeight()
             .clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        contentAlignment = Alignment.Center,
     ) {
         icon(tint)
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = tint,
-            maxLines = 1,
-        )
     }
 }
 
@@ -772,39 +814,6 @@ private fun BarTab(
  * also why the rule does not simply run edge to edge: a full-bleed line still
  * cuts the page in half.
  */
-/**
- * A plain back affordance for screens with no top bar.
- *
- * Icon and label together, 48dp tall so the target clears the touch minimum
- * without a Row of its own padding arithmetic. Left-aligned on purpose: the
- * bottom bar already puts its back arrow at the far left, and these two should
- * not sit on opposite sides of the screen.
- */
-@Composable
-private fun BackRow(label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp),
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-        )
-    }
-}
 
 @Composable
 private fun DayHeader(dayStart: Long) {
