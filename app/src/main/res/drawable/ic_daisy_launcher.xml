@@ -1,12 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    The Daisy mark as an adaptive-icon foreground: the same art scaled 0.6 and
-    offset 18 so it sits inside the middle 72dp of the 108dp canvas, clear of
-    every launcher mask.
+    Foreground only, no <background> layer.
 
-    Drawn without a background layer of its own. The earlier version put a
-    solid green behind the badge, but the badge is only 60dp across inside a
-    72dp safe zone, so the two greens met as a visible ring at the rim.
+    The badge is r=54 on a 108 grid, so it reaches the canvas edge on every
+    axis. Inside the 72dp safe zone that means the mask cuts inside the badge
+    rather than outside it, and there is no background colour anywhere to show
+    as a ring. An earlier version drew a flat green behind the badge and the
+    two greens met as a visible annulus; dropping the layer removes the
+    possibility rather than matching the colour and hoping.
+
+    54 -> 36 is 0.667 scale, offset (54-36) = 18 to centre the 72dp box.
+
+    Geometry below is transcribed from daisy.svg at 108x108, unmodified,
+    including the arc anchors at (21.6, 86.4).
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
@@ -18,17 +24,18 @@
     <group
         android:translateX="18"
         android:translateY="18"
-        android:scaleX="0.6"
-        android:scaleY="0.6">
+        android:scaleX="0.6666667"
+        android:scaleY="0.6666667">
 
-        <path android:pathData="M60,10 a50,50 0 1,0 0.01,0 z">
+        <!-- Badge: r=54 at (54,54). -->
+        <path android:pathData="M54,0 a54,54 0 1,0 0.01,0 z">
             <aapt:attr name="android:fillColor">
                 <gradient
                     android:type="linear"
-                    android:startX="60"
-                    android:startY="110"
-                    android:endX="60"
-                    android:endY="10">
+                    android:startX="54"
+                    android:startY="99"
+                    android:endX="54"
+                    android:endY="9">
                     <item android:offset="0" android:color="#0D7945" />
                     <item android:offset="0.3763" android:color="#14B667" />
                     <item android:offset="1" android:color="#17ACAE" />
@@ -36,21 +43,25 @@
             </aapt:attr>
         </path>
 
+        <!-- Outer quarter ring: stroke 10.8. -->
         <path
             android:strokeColor="#FFFFFF"
-            android:strokeWidth="10"
+            android:strokeWidth="10.8"
             android:strokeLineCap="butt"
             android:fillColor="#00000000"
-            android:pathData="M 30,35 A 55,55 0 0 1 85,90" />
-        <path
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="10"
-            android:strokeLineCap="butt"
-            android:fillColor="#00000000"
-            android:pathData="M 30,55 A 35,35 0 0 1 65,90" />
+            android:pathData="M 21.6,27 A 59.4,59.4 0 0 1 81,86.4" />
 
+        <!-- Inner quarter ring: stroke 10.8. -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="10.8"
+            android:strokeLineCap="butt"
+            android:fillColor="#00000000"
+            android:pathData="m 21.6,48.6 a 37.8,37.8 0 0 1 37.8,37.8" />
+
+        <!-- Yellow dot: r=9.72 at (31.32, 76.68). -->
         <path
             android:fillColor="#E8E833"
-            android:pathData="M39,72 a9,9 0 1,0 0.01,0 z" />
+            android:pathData="M31.32,66.96 a9.72,9.72 0 1,0 0.01,0 z" />
     </group>
 </vector>

@@ -2,9 +2,9 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="120"
-   height="120"
-   viewBox="0 0 120 120"
+   width="108"
+   height="108"
+   viewBox="0 0 108 108"
    version="1.1"
    id="svg1"
    inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
@@ -31,9 +31,9 @@
      inkscape:clip-to-page="false"
      showguides="true"
      showgrid="false"
-     inkscape:zoom="5.744886"
-     inkscape:cx="120.36792"
-     inkscape:cy="86.946895"
+     inkscape:zoom="3.0184937"
+     inkscape:cx="123.40592"
+     inkscape:cy="33.294753"
      inkscape:window-width="1912"
      inkscape:window-height="1012"
      inkscape:window-x="0"
@@ -86,49 +86,50 @@
        y1="110"
        x2="60"
        y2="10"
-       gradientUnits="userSpaceOnUse" />
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(1.08,0,0,1.08,-10.8,-10.8)" />
   </defs>
   <g
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1">
     <circle
-       style="fill:url(#linearGradient2);stroke-width:3;stroke:none;stroke-opacity:1;stroke-dasharray:none"
+       style="fill:url(#linearGradient2);stroke:none;stroke-width:3.24;stroke-dasharray:none;stroke-opacity:1"
        id="path1"
-       cx="60"
-       cy="60"
-       r="50" />
+       cx="54"
+       cy="54"
+       r="54" />
     <circle
-       style="fill:#e8e833;fill-opacity:1;stroke:none;stroke-width:1.125;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:#e8e833;fill-opacity:1;stroke:none;stroke-width:1.215;stroke-dasharray:none;stroke-opacity:1"
        id="path3"
-       cx="39"
-       cy="81"
-       r="9" />
+       cx="31.32"
+       cy="76.68"
+       r="9.7200003" />
     <path
-       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.8;stroke-dasharray:none;stroke-opacity:1"
        id="path6"
        sodipodi:type="arc"
-       sodipodi:cx="30"
-       sodipodi:cy="90"
-       sodipodi:rx="55"
-       sodipodi:ry="55"
+       sodipodi:cx="21.6"
+       sodipodi:cy="86.400002"
+       sodipodi:rx="59.400002"
+       sodipodi:ry="59.400002"
        sodipodi:start="4.712389"
        sodipodi:end="0"
        sodipodi:arc-type="arc"
-       d="M 30,35 A 55,55 0 0 1 85,90"
+       d="M 21.6,27 A 59.400002,59.400002 0 0 1 81.000002,86.400002"
        sodipodi:open="true" />
     <path
-       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:10.8;stroke-dasharray:none;stroke-opacity:1"
        id="path6-3"
        sodipodi:type="arc"
-       sodipodi:cx="30"
-       sodipodi:cy="90"
-       sodipodi:rx="35"
-       sodipodi:ry="35"
+       sodipodi:cx="21.6"
+       sodipodi:cy="86.400002"
+       sodipodi:rx="37.799999"
+       sodipodi:ry="37.799999"
        sodipodi:start="4.712389"
        sodipodi:end="0"
        sodipodi:arc-type="arc"
-       d="M 30,55 A 35,35 0 0 1 65,90"
+       d="m 21.6,48.600002 a 37.799999,37.799999 0 0 1 37.8,37.8"
        sodipodi:open="true" />
   </g>
 </svg>
