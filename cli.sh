@@ -69,7 +69,7 @@ JFLAG=()
 [ -n "$JANSI" ] && JFLAG=("-J$JANSI")
 
 kotlinc \
-    "$CORE"/{Model,Identity,Merge,DayBuckets,Discover,Fetch,Discoverer,YoutubeChannel,FeedParse,Dates,Json,Store,Opml,HttpFetcher,Sync}.kt \
+    "$CORE"/{Model,Identity,Merge,DayBuckets,Discover,Fetch,Discoverer,YoutubeChannel,FeedParse,Dates,Json,Store,Opml,HttpFetcher,Sync,Html,Readability}.kt \
     "$CLI"/Main.kt \
     -classpath "$CP_CORO" \
     "${JFLAG[@]}" \

@@ -5,162 +5,76 @@ import android.content.Intent
 import android.net.Uri
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import dev.daisy.core.Feed
 import dev.daisy.core.Item
+import dev.daisy.core.Readability
 import java.text.DateFormat
 import java.util.Date
-
-/**
- * One feed's items, and the article currently open.
- *
- * Two levels inside one composable: the feed's item list, and the article.
- * Neither is deep enough to justify a nav graph, but the article is a distinct
- * destination because it replaces the whole screen.
- *
- * Article bodies are shown in a WebView rather than being rendered. That is the
- * one place a third-party engine is doing real work for us, and it is a
- * deliberate trade: an HTML renderer would be a project of its own, and the
- * fallback -- open the original page -- needs a browser-equivalent anyway.
- * Nothing about the feed list depends on it.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ReaderScreen(
-    feedId: Long,
-    vm: DaisyViewModel,
-    onBack: () -> Unit,
-) {
-    val items by produceState<List<Item>?>(initialValue = null, feedId) {
-        value = vm.itemsFor(feedId)
-    }
-    var open by remember { mutableStateOf<Item?>(null) }
-    // produceState(keys) without an explicit initialValue infers T from the
-    // keys -- here a Long -- so the block's Feed? return then fails to match.
-    // Naming the type parameter is what disambiguates the overload.
-    val feed by produceState<Feed?>(initialValue = null, feedId) {
-        value = vm.feedById(feedId)
-    }
-
-    val article = open
-    if (article != null) {
-        // if/else rather than an early return: a composable that returns before
-        // its remaining calls changes the call-site structure between
-        // compositions, so the produceState above would be torn down and
-        // rebuilt every time an article opens or closes.
-        ArticleScreen(item = article, onBack = { open = null })
-    } else {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            feed?.title ?: "Feed",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                    navigationIcon = {
-                        // Label rather than a back arrow: material-icons-core's
-                        // availability varies by version and a text button cannot
-                        // silently render nothing.
-                        TextButton(onClick = onBack) { Text("Back") }
-                    },
-                )
-            },
-        ) { padding ->
-            val list = items
-            when {
-                list == null -> Box(Modifier.padding(padding).fillMaxSize(), Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-                list.isEmpty() -> Box(Modifier.padding(padding).fillMaxSize(), Alignment.Center) {
-                    Text("No items", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                else -> Column(
-                    Modifier
-                        .padding(padding)
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    list.forEach { item ->
-                        ItemRow(
-                            item = item,
-                            // The feed is already produced above, so the row
-                            // can carry its title and favicon rather than
-                            // leaving the avatar blank for every entry here.
-                            feedTitle = feed?.title.orEmpty(),
-                            faviconUrl = feed?.faviconUrl,
-                            // Failures here would be redundant: this screen is
-                            // one feed, and the list above it already explains
-                            // a broken one.
-                            failure = null,
-                            onClick = { open = item },
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * A single article.
  *
- * Prefers the feed-provided summary, because it is already downloaded and
- * therefore instant. Reader-mode extraction of the original page is the
- * better experience when it works, but it is a network round trip and a
- * parse that can fail; showing what we have immediately and offering the
- * original page is honest about which one the user is looking at.
+ * Shows the feed's summary immediately, then upgrades to the extracted page
+ * body when extraction succeeds. Order matters: the summary is already
+ * downloaded, so the screen has something to read on the first frame, while
+ * extracting the original page is a network round trip and a parse that can
+ * fail. Never a spinner with nothing behind it.
+ *
+ * No top bar. The title, the date and the back affordance all already exist in
+ * the article itself or on the bottom bar, and a bar here costs 64dp of a
+ * phone screen to repeat them. The system back gesture closes it, which is the
+ * gesture people already use to leave a page.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-// internal, not private: DaisyApp opens an article straight from the merged
-// entry list, which is a different file. A second copy of this screen there
-// would drift from the one ReaderScreen shows.
-internal fun ArticleScreen(item: Item, onBack: () -> Unit) {
+internal fun ArticleScreen(
+    item: Item,
+    onBack: () -> Unit,
+    // The busier call site (DaisyApp) has to keep reading other state, so the
+    // article is composed in two places. Both need the destination bar, and
+    // neither can build the other's: it lives private to DaisyApp. A slot
+    // keeps the bar in one implementation and lets each caller say which
+    // destination is lit.
+    bar: @Composable () -> Unit = {},
+) {
     val context = LocalContext.current
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(item.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                },
-                navigationIcon = {
-                    // Label rather than a back arrow: material-icons-core's
-                    // availability varies by version and a text button cannot
-                    // silently render nothing.
-                    TextButton(onClick = onBack) { Text("Back") }
-                },
-            )
-        },
-    ) { padding ->
+    // Back gesture and back button both unwind the reader. Without this the
+    // system back falls through to whatever is beneath, which is not the list
+    // this article came from.
+    BackHandler(enabled = true, onBack = onBack)
+
+    val extracted by produceState<Readability.Article?>(initialValue = null, item.link) {
+        val link = item.link ?: return@produceState
+        value = withContext(Dispatchers.IO) {
+            runCatching { fetchAndExtract(context, link) }.getOrNull()
+        }
+    }
+
+    // No top bar: the title and the date are in the article itself, and 64dp
+    // of a phone screen is a lot to spend repeating them. The gesture and the
+    // hardware back button both close this, which is how people leave a page.
+    Scaffold(bottomBar = bar) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
 
             item.published?.let {
@@ -172,7 +86,12 @@ internal fun ArticleScreen(item: Item, onBack: () -> Unit) {
                 )
             }
 
-            val body = item.summary
+            // The extracted body wins when it is long enough to be the article.
+            // A short result is a caption or a stray label, and showing it
+            // instead of the summary would be a downgrade.
+            val article = extracted?.takeIf { it.textLength >= Readability.MIN_USEFUL_CHARS }
+            val body = article?.html ?: item.summary
+
             if (body.isNullOrBlank()) {
                 Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
                     Text(
@@ -182,10 +101,23 @@ internal fun ArticleScreen(item: Item, onBack: () -> Unit) {
                     )
                 }
             } else {
-                ArticleBody(body, Modifier.weight(1f).fillMaxWidth())
+                val html = if (article != null) {
+                    buildString {
+                        article.title?.let { append("<h1>").append(escape(it)).append("</h1>") }
+                        article.byline?.let { append("<p class=byline>").append(escape(it)).append("</p>") }
+                        append(body)
+                    }
+                } else {
+                    body
+                }
+                ArticleBody(html, Modifier.weight(1f).fillMaxWidth())
             }
 
             item.link?.let { link ->
+                // Same treatment as import and export: a divider, then a
+                // full-width text button at one height. A bare button here was
+                // a third style for the same kind of control.
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 TextButton(
                     onClick = {
                         // Handing off to the browser rather than an in-app
@@ -194,7 +126,7 @@ internal fun ArticleScreen(item: Item, onBack: () -> Unit) {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link))
                         runCatching { context.startActivity(intent) }
                     },
-                    modifier = Modifier.padding(8.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                 ) {
                     Text("Open original")
                 }
@@ -202,6 +134,32 @@ internal fun ArticleScreen(item: Item, onBack: () -> Unit) {
         }
     }
 }
+
+/**
+ * Fetches a page and extracts its article.
+ *
+ * Kept out of the composable so the network and the parse are together and the
+ * UI only deals with the result. Any failure returns null, which the caller
+ * treats as "keep the summary".
+ */
+private fun fetchAndExtract(context: android.content.Context, url: String): Readability.Article? {
+    val html = runCatching {
+        val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+        conn.connectTimeout = 15_000
+        conn.readTimeout = 15_000
+        // Some sites serve a bare page to an unrecognised agent.
+        conn.setRequestProperty(
+            "User-Agent",
+            "Mozilla/5.0 (Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Daisy/1.0",
+        )
+        conn.inputStream.use { it.readBytes().decodeToString() }
+    }.getOrNull() ?: return null
+    return Readability.extract(html, url)
+}
+
+/** Minimal escaping for the title and byline, which come from the page. */
+private fun escape(s: String): String =
+    s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 /**
  * Renders a feed body in a WebView.

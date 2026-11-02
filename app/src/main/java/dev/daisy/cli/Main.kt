@@ -10,6 +10,7 @@ import dev.daisy.core.HttpFetcher
 import dev.daisy.core.IncomingItem
 import dev.daisy.core.Item
 import dev.daisy.core.Opml
+import dev.daisy.core.Readability
 import dev.daisy.core.Store
 import dev.daisy.core.Sync
 import kotlinx.coroutines.runBlocking
@@ -117,6 +118,29 @@ object Main {
                         }
                     }
                     else -> println(state)
+                }
+            }
+
+            // Extracts a page as the reader would. This is the only way to
+            // check the extractor against real sites, since the app cannot be
+            // driven from a test and reader mode is a network feature.
+            "read" -> {
+                if (arg == null) { usage(); return@runBlocking }
+                when (val r = fetcher.get(arg)) {
+                    is FetchResult.Ok -> {
+                        val a = Readability.extract(r.body, r.finalUrl)
+                        if (a == null) {
+                            println("NOTHING EXTRACTED from ${r.finalUrl}")
+                        } else {
+                            println("title   ${a.title ?: "(none)"}")
+                            println("byline  ${a.byline ?: "(none)"}")
+                            println("chars   ${a.textLength}")
+                            println("useful  ${a.textLength >= Readability.MIN_USEFUL_CHARS}")
+                            println()
+                            println(a.html)
+                        }
+                    }
+                    is FetchResult.Failed -> println("FETCH FAILED  ${r.reason}")
                 }
             }
 
@@ -317,6 +341,7 @@ object Main {
               list             stored items, newest first
               export [file]    write OPML (default daisy.opml)
               import <file>    read OPML and print its feeds
+              read <url>       extract a page the way reader mode does
 
             The store lives in ./daisy-data unless --dir says otherwise.
             """.trimIndent(),

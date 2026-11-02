@@ -85,7 +85,7 @@ import kotlinx.coroutines.withContext
  * existing part-way through it. Holding the delete back for the animation's own
  * duration lets the row finish leaving before it is told to go.
  */
-private const val REMOVE_ANIMATION_MS = 500L
+private const val REMOVE_ANIMATION_MS = 100L
 
 /**
  * The root of the UI: entries, the feed list, and the add flow.
@@ -126,14 +126,41 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
     // that feed, and tapping Add then confirming a feed left you looking at
     // the old one. The screen and the filter are two halves of one piece of
     // navigation state and cannot be changed separately.
-    BackHandler(enabled = screen != Screen.All) {
-        screen = Screen.All
-        vm.selectFeed(null)
+    // Enabled while an article is open as well as while a sub-screen is.
+    // An article opened from the merged list leaves `screen` on All, so the
+    // old condition was false and the system back closed the whole app
+    // instead of returning to the list. ArticleScreen has its own handler for
+    // the same gesture; both call the same close, and Compose uses the
+    // innermost enabled one, so they cannot disagree about the destination.
+    BackHandler(enabled = screen != Screen.All || openEntry != null) {
+        if (openEntry != null) {
+            openEntry = null
+        } else {
+            screen = Screen.All
+            vm.selectFeed(null)
+        }
     }
 
     val entry = openEntry
     when {
-        entry != null -> ArticleScreen(item = entry, onBack = { openEntry = null })
+        entry != null -> ArticleScreen(
+            item = entry,
+            onBack = { openEntry = null },
+            // Home: the merged list is where this was opened from, and it is
+            // the destination this article belongs to.
+            bar = {
+                DestinationBar(
+                    current = Screen.All,
+                    onShowFeeds = { screen = Screen.Feeds },
+                    onShowAll = {
+                        openEntry = null
+                        vm.selectFeed(null)
+                        screen = Screen.All
+                    },
+                    onShowAdd = { openEntry = null; screen = Screen.Add },
+                )
+            },
+        )
 
         screen is Screen.Add -> AddFeedScreen(
             discover = state.discover,
