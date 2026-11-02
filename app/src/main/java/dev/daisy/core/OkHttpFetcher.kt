@@ -45,8 +45,11 @@ class OkHttpFetcher(
                     return FetchResult.Failed(response.code, response.message.ifEmpty { "HTTP ${response.code}" })
                 }
 
+                // OkHttp 5 declares body non-null, so an elvis here could
+                // never fire -- it was carrying a null check from the OkHttp 4
+                // signature. An empty body still has to be rejected; that is
+                // a length check, not a null check.
                 val body = response.body
-                    ?: return FetchResult.Failed(response.code, "empty body")
 
                 // Bounded read. A feed page that streams forever must not
                 // exhaust memory; discovery only needs the head anyway.

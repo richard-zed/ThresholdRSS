@@ -5,13 +5,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,8 +38,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -147,6 +148,10 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
                 screen = Screen.All
             },
             onOpenEntry = { openEntry = it },
+            onOpenFeed = { feedId ->
+                vm.selectFeed(feedId)
+                screen = Screen.OneFeed(feedId)
+            },
             onShowFeeds = { screen = Screen.Feeds },
             onShowAdd = { screen = Screen.Add },
             onExportOpml = { vm.exportOpml() },
@@ -163,6 +168,7 @@ private fun FeedListScreen(
     onSync: () -> Unit,
     onShowAll: () -> Unit,
     onOpenEntry: (Item) -> Unit,
+    onOpenFeed: (Long) -> Unit,
     onShowFeeds: () -> Unit,
     onShowAdd: () -> Unit,
     onExportOpml: suspend () -> String,
@@ -209,66 +215,72 @@ private fun FeedListScreen(
     }
 
     val oneFeed = screen as? Screen.OneFeed
-    val feedTitle = oneFeed?.let { s ->
-        state.feeds.firstOrNull { it.id == s.feedId }?.title
-    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        when {
-                            oneFeed != null -> feedTitle ?: "Feed"
-                            else -> "Daisy"
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = {
-                    if (oneFeed != null) {
-                        IconButton(onClick = onShowAll) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "All feeds")
-                        }
-                    }
-                },
-                actions = {
-                    // Refresh lives in the pull gesture now. The spinner stays
-                    // so a sync started by another screen is still visible.
-                    if (state.syncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .width(20.dp)
-                                .height(20.dp),
-                            strokeWidth = 2.dp,
+        bottomBar = {
+            // Compact by hand rather than NavigationBar: the stock bar pads
+            // ~80dp tall with generous horizontal insets on every item, which
+            // is a lot of chrome for three destinations on a phone. 56dp
+            // matches a Material toolbar and keeps the icons thumb-sized.
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .height(56.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (oneFeed != null) {
+                    // Back lives down here because the top bar is gone. It is
+                    // not another destination -- it is the exit from this one,
+                    // so it sits at the far left, away from the three tabs it
+                    // would otherwise be mistaken for.
+                    IconButton(
+                        onClick = onShowAll,
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "All entries",
+                            tint = MaterialTheme.colorScheme.onSurface,
                         )
                     }
-                },
-            )
-        },
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
+                }
+
+                BarTab(
+                    label = "Feeds",
                     selected = oneFeed != null,
                     onClick = onShowFeeds,
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-                    label = { Text("Feeds") },
-                )
-                NavigationBarItem(
+                    modifier = Modifier.weight(1f),
+                ) { tint ->
+                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = tint)
+                }
+                BarTab(
+                    label = "Add",
                     selected = false,
                     onClick = onShowAdd,
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    label = { Text("Add") },
-                )
-                NavigationBarItem(
+                    modifier = Modifier.weight(1f),
+                ) { tint ->
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = tint)
+                }
+                BarTab(
+                    label = "Export",
                     selected = false,
                     onClick = { exportLauncher.launch("daisy-subscriptions.opml") },
-                    icon = { Icon(Icons.Filled.Share, contentDescription = null) },
-                    label = { Text("Export") },
-                )
+                    modifier = Modifier.weight(1f),
+                ) { tint ->
+                    Icon(Icons.Filled.Share, contentDescription = null, tint = tint)
+                }
+
+                if (state.syncing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp)
+                            .size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
             }
         },
     ) { padding ->
@@ -328,6 +340,10 @@ private fun FeedListScreen(
                                 faviconUrl = feed?.faviconUrl,
                                 failure = state.failures[item.feedId],
                                 onClick = { onOpenEntry(item) },
+                                // Tapping the feed name narrows to that feed,
+                                // which is the same thing picking it from the
+                                // Feeds screen does.
+                                onFeedClick = { onOpenFeed(item.feedId) },
                             )
                         }
                     }
@@ -653,17 +669,77 @@ private fun AddFeedScreen(
     }
 }
 
+/**
+ * One bottom-bar destination.
+ *
+ * Hand-rolled rather than NavigationBarItem so the bar can be 56dp: the stock
+ * item reserves 80dp of vertical space for a label plus its own padding, and
+ * three of those is a fifth of a phone screen spent on chrome.
+ *
+ * The icon arrives as a lambda taking the tint, so the selected/unselected
+ * colour choice happens once here instead of at all three call sites.
+ */
+@Composable
+private fun BarTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: @Composable (Color) -> Unit,
+) {
+    val tint = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        icon(tint)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = tint,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * A date divider between runs of entries.
+ *
+ * Not a full-width filled band. A tinted slab the width of the screen reads as
+ * a section header belonging to a second list -- which is exactly what it
+ * looked like, two feeds stacked in one. This is a hairline rule with the
+ * label sitting in it, on the list background, so it separates without
+ * announcing a new screen.
+ *
+ * The label is centred and the rules are equal weights either side, which is
+ * also why the rule does not simply run edge to edge: a full-bleed line still
+ * cuts the page in half.
+ */
 @Composable
 private fun DayHeader(dayStart: Long) {
-    Text(
-        text = dayLabel(dayStart),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    val line = MaterialTheme.colorScheme.outlineVariant
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-    )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HorizontalDivider(modifier = Modifier.weight(1f), color = line)
+        Text(
+            text = dayLabel(dayStart),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 10.dp),
+        )
+        HorizontalDivider(modifier = Modifier.weight(1f), color = line)
+    }
 }
 
 /**
@@ -688,6 +764,7 @@ internal fun ItemRow(
     faviconUrl: String?,
     failure: String?,
     onClick: () -> Unit,
+    onFeedClick: () -> Unit = {},
 ) {
     Column(
         Modifier
@@ -745,7 +822,8 @@ internal fun ItemRow(
                     contentDescription = null,
                     modifier = Modifier
                         .size(14.dp)
-                        .clip(CircleShape),
+                        .clip(CircleShape)
+                        .clickable(onClick = onFeedClick),
                 )
                 Spacer(Modifier.width(6.dp))
             }
@@ -756,17 +834,25 @@ internal fun ItemRow(
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
+                    // weight(1f, fill = false) lets the title take only what
+                    // it needs and leaves the rest to the time. Plain
+                    // weight(1f) would stretch it to half the row and open a
+                    // gap between a short name and its timestamp.
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .clickable(onClick = onFeedClick),
                 )
             }
-            Spacer(Modifier.width(8.dp))
+            // No weight here. The time is the LAST element and the title
+            // above already absorbs the slack, so this lands hard against the
+            // right edge and lines up down the column. Giving it weight(1f)
+            // as well was what let it wander when the title ran short.
+            Spacer(Modifier.weight(1f))
             Text(
                 text = entryTime(item),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.End,
             )
         }
 

@@ -14,6 +14,7 @@ import dev.daisy.core.FeedParser
 import dev.daisy.core.FetchResult
 import dev.daisy.core.Fetcher
 import dev.daisy.core.Item
+import dev.daisy.core.Merge
 import dev.daisy.core.Opml
 import dev.daisy.core.Store
 import dev.daisy.core.Sync
@@ -395,6 +396,12 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
                 id = id,
                 url = feedUrl,
                 title = title ?: feedUrl,
+                // Model.kt claims faviconUrl is "derived from siteUrl" but
+                // nothing ever derived it, so the field was permanently null
+                // and every avatar check was dead. A feed URL is not the same
+                // as the site's origin, so derive it here: nitter-style URLs
+                // and /feed paths both have to resolve back to a host.
+                faviconUrl = faviconFor(feedUrl),
             ),
         )
         // An empty items file, so a feed with no items yet still reads as
@@ -458,7 +465,14 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
                 // sort it again after the fact.
                 store.loadItems(filterId)
             }
-            DayBuckets.group(items, zone)
+            // loadAllItems is a flatMap over feeds, so it arrives grouped BY
+            // FEED. capAndSort ran per feed at merge time and says nothing
+            // about the merged list, and DayBuckets.group deliberately does
+            // not sort -- it documents that its input must already be newest
+            // first. Without this the separators stride backwards and forwards
+            // through the calendar and entries interleave by subscription
+            // order.
+            DayBuckets.group(items.sortedWith(Merge.ITEM_ORDER), zone)
         }
         return feeds to buckets
     }
@@ -528,4 +542,18 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun feedById(feedId: Long): Feed? = withContext(Dispatchers.IO) {
         store.loadFeeds().firstOrNull { it.id == feedId }
     }
+
+/**
+ * Google's favicon endpoint for the host of [feedUrl].
+ *
+ * Deriving the icon from the SITE rather than fetching /favicon.ico ourselves
+ * keeps this off the network at subscribe time and works for hosts that serve
+ * the icon from a CDN path we would not guess. Returns null for anything
+ * unparseable, which then renders as no avatar rather than a broken image.
+ */
+private fun faviconFor(feedUrl: String): String? {
+    val host = runCatching { java.net.URI(feedUrl).host }.getOrNull() ?: return null
+    if (host.isBlank()) return null
+    return "https://www.google.com/s2/favicons?domain=" + host + "&sz=64"
+}
 }
