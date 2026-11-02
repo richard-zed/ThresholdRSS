@@ -198,7 +198,6 @@ object UrlCandidates {
             }
 
             else -> emptyList()
-            else -> emptyList()
         }
     }
 
