@@ -832,7 +832,7 @@ private fun FeedPickerScreen(
             // feature look like two unrelated controls.
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             TextButton(
-                onClick = { exportLauncher.launch("daisy-subscriptions.opml") },
+                onClick = { exportLauncher.launch("thresholdrss-subscriptions.opml") },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
                 Text("Export subscriptions")
@@ -1390,7 +1390,7 @@ private fun EmptyState() {
             Text("No feeds yet", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(
-                "Add a site address or a feed URL. Daisy works out which.",
+                "Add a site address or a feed URL. ThresholdRSS works out which.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -1,29 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    The Daisy mark, drawn to fill its viewport. This is the copy used inline
-    (favicon slot, error painter), where it sits beside real favicons and must
-    occupy the same box as one.
+    The ThresholdRSS mark, drawn to fill its viewport. This is the copy used
+    inline (favicon slot, AsyncImage error/fallback painter), where it sits
+    beside real favicons and must occupy the same box as one.
 
-    The launcher uses ic_daisy_launcher instead, which scales the same art into
-    the adaptive-icon safe zone. Keeping the two apart is deliberate: one fills
-    its box, the other must not.
+    The launcher uses ic_daisy_launcher instead, which is the identical art
+    scaled 0.667 into the adaptive-icon safe zone. Keeping the two apart is
+    deliberate: one fills its box, the other must not.
+
+    Geometry matches daisy.svg at 108x108. The gradient's gradientTransform
+    matrix(1.08,0,0,1.08,-10.8,-10.8) resolves y1=110/y2=10 onto y=108/y=0,
+    so the ramp spans the full badge height.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="120"
-    android:viewportHeight="120">
+    android:viewportWidth="108"
+    android:viewportHeight="108">
 
-    <!-- Badge: r=50 at (60,60). -->
-    <path android:pathData="M60,10 a50,50 0 1,0 0.01,0 z">
+    <!-- Badge: r=54 at (54,54). -->
+    <path android:pathData="M54,0 a54,54 0 1,0 0.01,0 z">
         <aapt:attr name="android:fillColor">
             <gradient
                 android:type="linear"
-                android:startX="60"
-                android:startY="110"
-                android:endX="60"
-                android:endY="10">
+                android:startX="54"
+                android:startY="108"
+                android:endX="54"
+                android:endY="0">
                 <item android:offset="0" android:color="#0D7945" />
                 <item android:offset="0.3763" android:color="#14B667" />
                 <item android:offset="1" android:color="#17ACAE" />
@@ -31,20 +35,24 @@
         </aapt:attr>
     </path>
 
+    <!-- Outer quarter ring: radius 53.3415, stroke 10.6584, round cap. -->
     <path
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="10"
-        android:strokeLineCap="butt"
+        android:strokeWidth="10.6584"
+        android:strokeLineCap="round"
         android:fillColor="#00000000"
-        android:pathData="M 30,35 A 55,55 0 0 1 85,90" />
-    <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="10"
-        android:strokeLineCap="butt"
-        android:fillColor="#00000000"
-        android:pathData="M 30,55 A 35,35 0 0 1 65,90" />
+        android:pathData="M 27.329201,27.329201 A 53.341534,53.341599 0 0 1 80.670734,80.670799" />
 
+    <!-- Inner quarter ring: radius 33.3943, stroke 10.6056, round cap. -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10.6056"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M 27.302799,47.302799 A 33.394344,33.39439 0 0 1 60.697144,80.697189" />
+
+    <!-- Yellow dot: r=11 at (33, 75). -->
     <path
         android:fillColor="#E8E833"
-        android:pathData="M39,72 a9,9 0 1,0 0.01,0 z" />
+        android:pathData="M33,64 a11,11 0 1,0 0.01,0 z" />
 </vector>

@@ -22,7 +22,7 @@ object Opml {
      * Both are written because importers differ in which they use, and omitting
      * htmlUrl makes the imported list look anonymous in some readers.
      */
-    fun export(feeds: List<Feed>, title: String = "Daisy subscriptions"): String {
+    fun export(feeds: List<Feed>, title: String = "ThresholdRSS subscriptions"): String {
         val sb = StringBuilder()
         sb.append("""<?xml version="1.0" encoding="UTF-8"?>""").append('\n')
         sb.append("""<opml version="2.0">""").append('\n')

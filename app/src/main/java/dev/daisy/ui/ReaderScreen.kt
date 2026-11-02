@@ -158,7 +158,7 @@ private fun fetchAndExtract(context: android.content.Context, url: String): Read
         // Some sites serve a bare page to an unrecognised agent.
         conn.setRequestProperty(
             "User-Agent",
-            "Mozilla/5.0 (Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Daisy/1.0",
+            "Mozilla/5.0 (Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) ThresholdRSS/1.0",
         )
         conn.inputStream.use { it.readBytes().decodeToString() }
     }.getOrNull() ?: return null

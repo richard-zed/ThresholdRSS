@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit
  */
 class OkHttpFetcher(
     private val client: OkHttpClient = defaultClient(),
-    private val userAgent: String = "Daisy/0.1 (+rss reader)",
+    private val userAgent: String = "ThresholdRSS/0.1 (+rss reader)",
 ) : Fetcher {
 
     companion object {
