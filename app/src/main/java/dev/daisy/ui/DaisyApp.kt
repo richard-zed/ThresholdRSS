@@ -82,7 +82,6 @@ import dev.daisy.core.Item
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -94,7 +93,6 @@ import kotlinx.coroutines.withContext
  * existing part-way through it. Holding the delete back for the animation's own
  * duration lets the row finish leaving before it is told to go.
  */
-private const val REMOVE_ANIMATION_MS = 100L
 
 /**
  * The root of the UI: entries, the feed list, and the add flow.
@@ -473,7 +471,6 @@ private fun FeedPickerScreen(
 
             LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth()) {
                 itemsIndexed(state.feeds, key = { _, f -> "feed-${f.id}" }) { index, feed ->
-                    val scope = rememberCoroutineScope()
                     val key = "feed-${feed.id}"
                     val isDragging = draggingKey == key
                     // Shift accumulated while dragging, converted back to an
@@ -504,14 +501,18 @@ private fun FeedPickerScreen(
                         confirmValueChange = { value ->
                             if (value == SwipeToDismissBoxValue.EndToStart && !committed) {
                                 committed = true
-                                scope.launch {
-                                    // Matches the dismissal's own duration; the
-                                    // shorter of the two would cut it off
-                                    // half-way and the longer would show a gap
-                                    // where a row used to be.
-                                    delay(REMOVE_ANIMATION_MS)
-                                    onRemoveFeed(feed.id)
-                                }
+                                // Remove now, not after a delay.
+                                //
+                                // The delay existed to let the row finish its
+                                // dismissal before the list changed, because
+                                // the state update used to take long enough
+                                // that the two were visibly separate events.
+                                // Now that the update is in-memory it lands in
+                                // the same frame as the swipe, and
+                                // animateItem() animates the exit from there.
+                                // Keeping the delay on top of that is what
+                                // made the row snap back and then jump.
+                                onRemoveFeed(feed.id)
                                 true
                             } else {
                                 value != SwipeToDismissBoxValue.EndToStart

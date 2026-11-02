@@ -520,24 +520,37 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun removeFeed(feedId: Long) {
         viewModelScope.launch {
-            // The re-read happens INSIDE the lock, and the state is published
-            // from that read.
+            // The write is the only thing that needs the lock and the IO
+            // dispatcher. The state update afterwards is in-memory.
             //
-            // It used to call load() afterwards, which was wrong twice over:
-            // load() does not suspend, it launches -- so it returned at once and
-            // its body raced the writes just made above -- and the read itself
-            // was outside writeLock, so a sync could slip in between the delete
-            // and the re-read and publish the feed straight back. The row stayed
-            // on screen and the only way to clear it was to leave and return.
-            val snapshot = withContext(Dispatchers.IO) {
+            // This used to finish by calling snapshotLocked(), which re-read
+            // every feed's items from disk after deleting one feed. That read
+            // is what made the row snap back and then vanish a moment later:
+            // the swipe committed, the delete hit disk, and the list only
+            // changed once every other file had been re-parsed.
+            val removed = withContext(Dispatchers.IO) {
                 writeLock.withLock {
+                    // Read under the lock: an unlocked read here is what once
+                    // let a concurrent sync resurrect the deleted feed.
+                    val feeds = store.loadFeeds().filterNot { it.id == feedId }
                     store.deleteFeed(feedId)
-                    store.saveFeeds(store.loadFeeds().filterNot { it.id == feedId })
-                    snapshotLocked()
+                    store.saveFeeds(feeds)
+                    feeds
                 }
             }
-            _state.update {
-                it.copy(feeds = snapshot.first, buckets = snapshot.second, loading = false)
+
+            // Drop the removed feed's entries from buckets we already hold.
+            // Its items were deleted with it, so leaving them would strand
+            // entries whose feed no longer exists -- they are not re-read
+            // here, so nothing else would clear them.
+            _state.update { s ->
+                s.copy(
+                    feeds = removed,
+                    buckets = s.buckets
+                        .map { b -> b.copy(items = b.items.filterNot { it.feedId == feedId }) }
+                        .filter { b -> b.items.isNotEmpty() },
+                    loading = false,
+                )
             }
         }
     }
@@ -558,18 +571,28 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
     fun moveFeed(from: Int, to: Int) {
         if (from == to) return
         viewModelScope.launch {
-            val snapshot = withContext(Dispatchers.IO) {
+            val reordered = withContext(Dispatchers.IO) {
                 writeLock.withLock {
-                    val feeds = store.loadFeeds().toMutableList()
+                    // Reorder the list ALREADY in state, not one re-read from
+                    // disk: the caller just saw this order, and a stale disk
+                    // read would move a different feed than the one dragged.
+                    val feeds = _state.value.feeds.toMutableList()
                     if (from !in feeds.indices || to !in feeds.indices) return@withLock null
                     feeds.add(to, feeds.removeAt(from))
                     store.saveFeeds(feeds)
-                    snapshotLocked()
+                    feeds
                 }
             } ?: return@launch
-            _state.update {
-                it.copy(feeds = snapshot.first, buckets = snapshot.second, loading = false)
-            }
+
+            // Publish the new order WITHOUT rebuilding buckets.
+            //
+            // This used to call snapshotLocked(), which re-reads every items
+            // file for every feed and re-parses, re-sorts and re-buckets them
+            // -- for a gesture that changed no item at all. That read was the
+            // visible lag: the row snapped back, the disk write finished, then
+            // the list jumped. Buckets are unaffected by feed order: they are
+            // grouped by day and filtered by feed id, and the ids did not move.
+            _state.update { it.copy(feeds = reordered) }
         }
     }
 
