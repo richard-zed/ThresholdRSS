@@ -2,8 +2,19 @@
 <resources>
     <!--
       Compose draws everything; this theme exists so the window does not flash
-      an unstyled white frame before the first composition. Material You comes
-      from dynamicLightColorScheme/dynamicDarkColorScheme in Kotlin, not here.
+      an unstyled frame before the first composition. Material You comes from
+      dynamicLightColorScheme/dynamicDarkColorScheme in Kotlin, not here.
+
+      The window background used to be inherited from Theme.Material.Light,
+      which is opaque white, so opening the app flashed white regardless of
+      the palette Compose was about to draw. It is now a resource with day and
+      night values, so it lands near the eventual background in both modes. It
+      cannot match a dynamic scheme exactly (that is wallpaper derived and only
+      readable once the activity exists), so these are the fallback palette's
+      background colours and the remaining difference is the gap between them
+      and whatever the wallpaper hands back.
     -->
-    <style name="Theme.Daisy" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Daisy" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
 </resources>

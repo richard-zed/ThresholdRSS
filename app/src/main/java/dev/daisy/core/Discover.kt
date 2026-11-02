@@ -85,7 +85,14 @@ object UrlCandidates {
      * matches a rule and appears in the conventional list is not fetched twice.
      */
     fun forInput(input: String, siteHandlesDiscovery: Boolean = true): List<Candidate> {
-        val trimmed = input.trim()
+        // A fediverse handle is rewritten to its profile url BEFORE the url
+        // check, because a handle is not a url and the check would reject it.
+        // `@someone@mastodon.social` has no scheme and its "host" would parse
+        // as the literal string `@someone@mastodon.social`, which fails the
+        // dotted-TLD test -- so every handle returned an empty candidate list
+        // and the walk never ran. See [profileUrlForHandle].
+        val handle = profileUrlForHandle(input)
+        val trimmed = (handle ?: input).trim()
         if (trimmed.isEmpty() || !looksLikeUrl(trimmed)) return emptyList()
 
         val out = ArrayList<Candidate>()
@@ -179,11 +186,39 @@ object UrlCandidates {
             // Being last means a host with a more specific rule wins, and only
             // an @-shaped path nobody claimed falls through to here. The cost of
             // being wrong is one request.
-            noTrailing.contains("/@") && !noTrailing.endsWith(".rss") ->
-                listOf("$noTrailing.rss")
+            // `/@user` is the canonical profile path; `/users/user` is the
+            // older path some instances still serve, and Mastodon redirects
+            // one to the other for pages but NOT always for .rss. Both are
+            // tried, .rss first, since that is the one every instance that
+            // offers a feed at all will answer.
+            noTrailing.contains("/@") && !noTrailing.endsWith(".rss") -> {
+                val rss = "$noTrailing.rss"
+                val alt = federatedRss(noTrailing)
+                if (alt == null) listOf(rss) else listOf(rss, alt)
+            }
 
             else -> emptyList()
+            else -> emptyList()
         }
+    }
+
+    /**
+     * `/@user` -> `/users/user`, so the older Mastodon profile path can be
+     * tried as well. Handles on other networks use `@` too, so this must only
+     * fire when the path has exactly the two segments an @-profile has --
+     * otherwise `/@a/@b.rss` style nonsense gets generated.
+     *
+     * Returns null when the path is not that shape, and the caller then keeps
+     * its single guess. Null is not an error, it is "no second opinion here".
+     */
+    private fun federatedRss(url: String): String? {
+        val afterHost = url.substringAfter("://").substringAfter('/', "")
+        val segs = afterHost.split('/').filter { it.isNotEmpty() }
+        if (segs.size != 1 || !segs[0].startsWith("@")) return null
+        val base = url.substringBeforeLast('/')
+        val user = segs[0].substring(1)
+        if (user.isEmpty()) return null
+        return "$base/users/$user.rss"
     }
 
     /**
@@ -221,6 +256,41 @@ object UrlCandidates {
      * Anything containing a slash before the first dot, or whitespace, is still
      * rejected: that is a path fragment or a sentence, not a host.
      */
+    /**
+     * `@user@host` or `@user` -> the instance's profile page, or null if the
+     * input is not a handle.
+     *
+     * Only the TWO-part form can be resolved. A bare `@user` names no instance,
+     * so there is nothing to fetch and it is left alone -- returning a guess
+     * would send the request to example.com.
+     *
+     * The leading `@` is optional because people paste `user@host` as often as
+     * `@user@host`, and both mean the same person. A url that already carries
+     * a scheme is never a handle, so `https://mastodon.social/@someone` passes
+     * through untouched.
+     */
+    fun profileUrlForHandle(input: String): String? {
+        val s = input.trim()
+        if (s.isEmpty() || s.contains("://") || s.any { it.isWhitespace() }) return null
+        // Strip the leading `@` so `@user@host` and `user@host` take one path.
+        val body = if (s.startsWith("@")) s.substring(1) else s
+        // An `@` at position 0 of the remainder would be an empty local part.
+        if (body.isEmpty() || body.startsWith("@")) return null
+        val at = body.indexOf('@')
+        if (at <= 0 || at == body.length - 1) return null
+
+        val user = body.substring(0, at)
+        val host = body.substring(at + 1)
+        // The local part is one path segment: anything with a slash or a second
+        // @ is not a handle, it is a malformed url.
+        if (user.contains('/') || host.contains('/') || host.contains('@')) return null
+        // Reuse the url host test so `user@foo` is rejected the same way `foo`
+        // is, rather than becoming https://foo/@user.
+        if (!looksLikeUrl(host)) return null
+
+        return "https://$host/@$user"
+    }
+
     private fun looksLikeUrl(s: String): Boolean {
         if (s.startsWith("http://") || s.startsWith("https://")) return true
         if (s.any { it.isWhitespace() }) return false

@@ -1,6 +1,7 @@
 package dev.daisy.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -186,5 +187,69 @@ class DiscoverTest {
             DiscoverState.NotFound(listOf(Attempt("https://a", Attempt.Outcome.HTTP_ERROR, "404"))),
         )
         assertEquals(states.size, states.toSet().size)
+    }
+
+    // --- fediverse handles ---------------------------------------------------
+
+    @Test
+    fun `a fediverse handle resolves to its profile url`() {
+        // The form people actually paste. Before the handle step existed this
+        // returned an empty candidate list: `@someone@mastodon.social` was
+        // split on '/' and its "host" failed the dotted-TLD check.
+        assertEquals(
+            "https://mastodon.social/@someone",
+            UrlCandidates.profileUrlForHandle("@someone@mastodon.social"),
+        )
+    }
+
+    @Test
+    fun `the leading at sign is optional`() {
+        assertEquals(
+            UrlCandidates.profileUrlForHandle("@someone@mastodon.social"),
+            UrlCandidates.profileUrlForHandle("someone@mastodon.social"),
+        )
+    }
+
+    @Test
+    fun `a handle produces feed candidates rather than an empty list`() {
+        val list = urls("@someone@mastodon.social")
+        assertEquals("https://mastodon.social/@someone", list.first())
+        assertTrue("expected a .rss guess", list.contains("https://mastodon.social/@someone.rss"))
+        assertTrue(
+            "expected the /users path guess",
+            list.contains("https://mastodon.social/users/someone.rss"),
+        )
+    }
+
+    @Test
+    fun `a bare handle names no instance and is left alone`() {
+        assertNull(UrlCandidates.profileUrlForHandle("@someone"))
+        assertTrue(urls("@someone").isEmpty())
+    }
+
+    @Test
+    fun `a url is never mistaken for a handle`() {
+        assertNull(UrlCandidates.profileUrlForHandle("https://mastodon.social/@someone"))
+        // And it keeps leading its own walk.
+        assertEquals(
+            "https://mastodon.social/@someone",
+            urls("https://mastodon.social/@someone").first(),
+        )
+    }
+
+    @Test
+    fun `a malformed handle is rejected rather than guessed at`() {
+        assertNull(UrlCandidates.profileUrlForHandle("@a@b@c"))
+        assertNull(UrlCandidates.profileUrlForHandle("@user@foo"))
+        assertNull(UrlCandidates.profileUrlForHandle("@@host.com"))
+    }
+
+    @Test
+    fun `the users path guess is not generated for a deeper profile path`() {
+        val list = urls("https://mastodon.social/@someone/@other")
+        assertFalse(
+            "a two-segment @path is not a profile",
+            list.any { it.contains("/users/") },
+        )
     }
 }

@@ -34,7 +34,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -64,7 +63,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -671,6 +669,14 @@ private fun AddFeedScreen(
                 DiscoverState.Idle -> Unit
             }
 
+            }
+
+            // Outside the padded column, matching the export footer on the
+            // Feeds screen. Inside it the divider stopped at the 16dp inset
+            // and the button text sat inset while export's ran edge to edge,
+            // so two halves of one feature read as two different controls.
+            // The weight is on the spacer inside the scrollable content, so
+            // this block pins to the bottom of the screen either way.
             Spacer(Modifier.weight(1f))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             TextButton(
@@ -678,7 +684,6 @@ private fun AddFeedScreen(
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
                 Text("Import subscriptions")
-            }
             }
         }
     }
@@ -697,10 +702,12 @@ private fun AddFeedScreen(
  * a local variable the other screens did not have, which is why this could
  * not simply be copied across.
  *
- * Icons only. Three labels under three icons was a lot of text on a 56dp
- * bar, and the glyphs are unambiguous at this size. contentDescription now
- * carries the name, so a screen reader gets the same information the
- * visible label used to provide.
+ * Icon above label, both tinted from the same selected/unselected colour.
+ * The labels were briefly dropped -- the glyphs are unambiguous at this size
+ * and three words is a lot of chrome -- but the bar reads as unlabelled
+ * furniture without them, so they are back and the bar grew to 64dp to hold
+ * both. The icon keeps its contentDescription: the visible label is text, not
+ * a description, and TalkBack should not announce two names for one target.
  */
 @Composable
 private fun DestinationBar(
@@ -711,12 +718,15 @@ private fun DestinationBar(
 ) {
     // Compact by hand rather than NavigationBar: the stock bar pads ~80dp
     // tall with generous horizontal insets on every item, which is a lot of
-    // chrome for three destinations on a phone. 56dp matches a Material
-    // toolbar and keeps the icons thumb-sized.
+    // chrome for three destinations on a phone.
+    //
+    // 64dp, not the 56dp toolbar height it used to be. 56 is right for icons
+    // alone; an icon plus a label needs the extra 8 or the label crowds the
+    // bottom edge and the pair sits high in the box.
     //
     // The background has to be applied BEFORE navigationBarsPadding, not
     // after. Modifier order is outside-in: with the padding first, the
-    // padding pushes the background (and the 56dp content) up out of the
+    // padding pushes the background (and the 64dp content) up out of the
     // gesture area, leaving a transparent strip from the bar's bottom edge
     // to the screen bottom. Drawing the background first and letting the
     // inset expand the box inside it makes the tint run to the physical
@@ -734,13 +744,14 @@ private fun DestinationBar(
             Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .height(56.dp),
+                .height(64.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Feeds covers a single feed's view too: opening a feed is a
             // detail of the Feeds destination, not a fourth one, so the tab
             // stays lit while you are inside it.
             BarTab(
+                label = "Feeds",
                 selected = current is Screen.Feeds || current is Screen.OneFeed,
                 onClick = onShowFeeds,
                 modifier = Modifier.weight(1f),
@@ -752,6 +763,7 @@ private fun DestinationBar(
                 )
             }
             BarTab(
+                label = "Home",
                 selected = current is Screen.All,
                 onClick = onShowAll,
                 modifier = Modifier.weight(1f),
@@ -759,6 +771,7 @@ private fun DestinationBar(
                 Icon(Icons.Filled.Home, contentDescription = "Home", tint = tint)
             }
             BarTab(
+                label = "Add",
                 selected = current is Screen.Add,
                 onClick = onShowAdd,
                 modifier = Modifier.weight(1f),
@@ -772,7 +785,7 @@ private fun DestinationBar(
 /**
  * One bottom-bar destination.
  *
- * Hand-rolled rather than NavigationBarItem so the bar can be 56dp: the stock
+ * Hand-rolled rather than NavigationBarItem so the bar can be 64dp: the stock
  * item reserves 80dp of vertical space for a label plus its own padding, and
  * three of those is a fifth of a phone screen spent on chrome.
  *
@@ -781,6 +794,7 @@ private fun DestinationBar(
  */
 @Composable
 private fun BarTab(
+    label: String,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -791,13 +805,20 @@ private fun BarTab(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Box(
+    Column(
         modifier = modifier
             .fillMaxHeight()
             .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
         icon(tint)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = tint,
+            maxLines = 1,
+        )
     }
 }
 

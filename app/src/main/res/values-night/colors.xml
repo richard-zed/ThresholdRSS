@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- FallbackDark.background. Kept equal to it so the pre-composition frame
+         matches what a device without Material You will draw. -->
+    <color name="window_background">#FF191C19</color>
+</resources>
