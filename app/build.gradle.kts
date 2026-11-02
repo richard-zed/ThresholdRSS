@@ -19,6 +19,22 @@ android {
 
     buildTypes {
         release {
+            // Signing release with the DEBUG key, for local testing only. The
+            // debug keystore's password is literally "android", so anyone can
+            // sign a build that updates this one -- delete this line and point
+            // at a real keystore before shipping.
+            //
+            // Reusing AGP's generated debug config rather than re-declaring a
+            // signingConfigs block: AGP generates ~/.android/debug.keystore on
+            // first debug build, and a hand-written path would fail at signing
+            // on a machine that has not built debug yet -- turning "unsigned
+            // APK" into a confusing build error. This way the keystore exists
+            // by construction.
+            //
+            // Why not a real keystore now: a different signature forces an
+            // uninstall to switch, which wipes feeds.json and every downloaded
+            // article. This keeps the install upgradeable in place.
+            signingConfig = signingConfigs.getByName("debug")
             // R8 full mode is AGP's default. `proguard-android-optimize.txt`
             // turns on the optimisation passes as well as shrinking -- the
             // plain `proguard-android.txt` variant only strips dead code.
