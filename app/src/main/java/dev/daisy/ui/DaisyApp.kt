@@ -27,10 +27,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -461,6 +463,11 @@ private fun FeedPickerScreen(
             val listState = rememberLazyListState()
             var draggingKey by remember { mutableStateOf<String?>(null) }
             var dragOffset by remember { mutableFloatStateOf(0f) }
+            // Index the dragged row would land in if released now. Held here
+            // rather than per-row so the DESTINATION row can draw the marker:
+            // the row under the finger is the one being moved, so an indicator
+            // on it would say nothing about where it is going.
+            var dropIndex by remember { mutableStateOf<Int?>(null) }
 
             fun rowHeightPx(): Float {
                 val info = listState.layoutInfo
@@ -469,10 +476,33 @@ private fun FeedPickerScreen(
                     ?: 0f
             }
 
+            // Where a row dragged `offset` px from `index` would land.
+            //
+            // One function for both the live marker and the release, so the
+            // outline can never promise a slot the drop does not use. A zero
+            // row height (first frame, nothing laid out) returns the start
+            // index rather than dividing by zero.
+            fun targetIndexFor(index: Int, offset: Float): Int {
+                val h = rowHeightPx()
+                if (h <= 0f) return index
+                val step = (offset / h).roundToInt()
+                return (index + step).coerceIn(0, state.feeds.lastIndex)
+            }
+
             LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth()) {
                 itemsIndexed(state.feeds, key = { _, f -> "feed-${f.id}" }) { index, feed ->
                     val key = "feed-${feed.id}"
                     val isDragging = draggingKey == key
+                    // The row will be dropped here. Distinguish "no drag" from
+                    // "dragging but landing where it started": the latter
+                    // shows no marker, because a row cannot be inserted into
+                    // its own slot.
+                    // Local capture: dropIndex is a var from an outer scope,
+                    // so it cannot be smart-cast after a null check and the
+                    // comparison would silently be Int? against Int.
+                    val target = dropIndex
+                    val isDropTarget =
+                        draggingKey != null && target != null && target == index && !isDragging
                     // Shift accumulated while dragging, converted back to an
                     // index step. Kept in a plain float rather than snapping to
                     // an integer so a drag shorter than a row still shows
@@ -487,7 +517,12 @@ private fun FeedPickerScreen(
                         // commits it -- so this demands a swipe most of the
                         // way across, and only counts distance toward the
                         // dismiss direction, which is end-to-start (left).
-                        positionalThreshold = { totalDistance -> totalDistance * 0.6f },
+                        // Third of the row width. It was at 0.6, which on a
+                        // short row is most of the way across; a third still
+                        // cannot be hit by accident because the gesture has to
+                        // start moving left with intent, but it no longer
+                        // demands a full sweep for a deliberate delete.
+                        positionalThreshold = { totalDistance -> totalDistance / 3f },
                         // Destructive, so a swipe alone does not commit it:
                         // returning TRUE tells the box the row really is
                         // dismissed, which parks it off-screen and lets it play
@@ -544,6 +579,7 @@ private fun FeedPickerScreen(
                                     onDragStart = {
                                         draggingKey = key
                                         dragOffset = 0f
+                                        dropIndex = index
                                     },
                                     onDragEnd = {
                                         // Commit on release rather than mid-drag:
@@ -551,19 +587,16 @@ private fun FeedPickerScreen(
                                         // rewrites meta.json dozens of times for
                                         // one gesture, and each write publishes a
                                         // new list, which fights the drag itself.
-                                        val h = rowHeightPx()
-                                        if (h > 0f) {
-                                            val step = (dragOffset / h).roundToInt()
-                                            val target = (index + step)
-                                                .coerceIn(0, state.feeds.lastIndex)
-                                            if (target != index) onMoveFeed(index, target)
-                                        }
+                                        val target = targetIndexFor(index, dragOffset)
+                                        if (target != index) onMoveFeed(index, target)
                                         draggingKey = null
                                         dragOffset = 0f
+                                        dropIndex = null
                                     },
                                     onDragCancel = {
                                         draggingKey = null
                                         dragOffset = 0f
+                                        dropIndex = null
                                     },
                                     onDrag = { change, amount ->
                                         // Only dy is consumed. Consuming the
@@ -572,6 +605,10 @@ private fun FeedPickerScreen(
                                         // gestures would fight over every drag.
                                         change.consume()
                                         dragOffset += amount.y
+                                        // Same arithmetic as onDragEnd, so the
+                                        // marker cannot promise one slot and the
+                                        // release land in another.
+                                        dropIndex = targetIndexFor(index, dragOffset)
                                     },
                                 )
                             },
@@ -654,7 +691,27 @@ private fun FeedPickerScreen(
                             colors = ListItemDefaults.colors(
                                 containerColor = MaterialTheme.colorScheme.surface,
                             ),
-                            modifier = Modifier.clickable { onOpenFeed(feed.id) },
+                            // Drop marker goes on the row itself, not on the
+                            // SwipeToDismissBox: content IS the row (trailing
+                            // lambda), there is no named content slot to add,
+                            // and the outline must sit inside this row's bounds
+                            // so it marks the slot without covering a
+                            // neighbour. Primary is the Material You accent, so
+                            // it follows the wallpaper palette and needs no
+                            // colour named here.
+                            modifier = Modifier
+                                .clickable { onOpenFeed(feed.id) }
+                                .then(
+                                    if (isDropTarget) {
+                                        Modifier.border(
+                                            width = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            shape = RoundedCornerShape(12.dp),
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                         )
                     }
                 }
