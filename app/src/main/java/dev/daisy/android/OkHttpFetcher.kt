@@ -12,12 +12,11 @@ import java.util.concurrent.TimeUnit
 /**
  * A [Fetcher] over OkHttp, for the app.
  *
- * The CLI's HttpFetcher exists so the pipeline can run on a bare JDK; this one
- * exists because Android wants a connection pool and real timeouts, and because
- * HttpURLConnection on Android has a history of leaking sockets under redirect
- * chains. The observable contract is identical -- [FetchResult.Ok] with the
- * FINAL url and the body, [FetchResult.Failed] with a nullable status -- so
- * everything above this line is unaware which one it got.
+ * The only [Fetcher] in the tree. Android wants a connection pool and real
+ * timeouts, and HttpURLConnection on Android has a history of leaking sockets
+ * under redirect chains. The contract it upholds -- [FetchResult.Ok] with the
+ * FINAL url and the body, [FetchResult.Failed] with a nullable status -- is the
+ * one everything above this line was written against.
  *
  * Three choices worth stating:
  *
@@ -104,9 +103,8 @@ class OkHttpFetcher(
      * JVM knows it; an unknown name falls back rather than throwing, because a
      * server naming an encoding it invented is not a reason to fail the fetch.
      *
-     * Deliberately the same function as the CLI's, because a body decoded
-     * differently in the app than in the terminal would be a bug that only
-     * shows up on one of them.
+     * The one place a response body stops being bytes, so it is the only place
+     * a title can be mangled.
      */
     private fun charsetOf(contentType: String?): java.nio.charset.Charset {
         val utf8 = java.nio.charset.Charset.forName("UTF-8")

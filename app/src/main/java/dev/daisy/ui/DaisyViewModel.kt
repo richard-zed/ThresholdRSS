@@ -219,11 +219,16 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
         val failures = LinkedHashMap<Long, String>()
         var inserted = 0
 
-        // Snapshot the feed list ONCE and keep a running copy. Each feed
-        // used to re-read and rewrite meta.json inside the loop, which is a
-        // read-modify-write of the entire list per feed; the last writer
-        // otherwise wins and silently discards the others' lastFetched.
-        var working = feeds
+        // The refreshed fields, keyed by feed id, accumulated as the fold runs.
+        // This used to be the whole list, rebuilt with a map per feed just to
+        // be flattened back into a lookup at the end -- n list copies to
+        // produce one map. Only the refreshed columns are needed: the merge
+        // below re-reads disk for everything else.
+        //
+        // Each feed used to re-read and rewrite meta.json inside the loop,
+        // which is a read-modify-write of the entire list per feed; the last
+        // writer otherwise wins and silently discards the others' lastFetched.
+        val refreshed = HashMap<Long, Feed>(feeds.size)
 
         // Fetch every feed CONCURRENTLY, then fold the results in list order.
         //
@@ -237,7 +242,7 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
         // refreshOne is safe to run in parallel: it writes only its own feed's
         // items file and returns an outcome rather than mutating anything
         // shared. All accumulation happens below, single-threaded, in list
-        // order -- so `working`, `failures` and `inserted` need no lock and
+        // order -- so `refreshed`, `failures` and `inserted` need no lock and
         // the resulting state does not depend on which request finished first.
         //
         // Every child is guarded by safeRefresh, which is what keeps one feed
@@ -278,16 +283,10 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
         for ((feed, outcome) in results) {
             when (outcome) {
                 is Sync.Outcome.Updated -> {
-                    working = working.map {
-                        if (it.id == feed.id) {
-                            it.copy(
-                                title = outcome.title ?: it.title,
-                                lastFetched = Sync.stamp(now),
-                            )
-                        } else {
-                            it
-                        }
-                    }
+                    refreshed[feed.id] = feed.copy(
+                        title = outcome.title ?: feed.title,
+                        lastFetched = Sync.stamp(now),
+                    )
                     withContext(Dispatchers.IO) { store.saveItems(feed.id, outcome.items) }
                     inserted += outcome.inserted
                 }
@@ -297,11 +296,11 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
 
         // One write for the whole sync, after every feed has settled.
         //
-        // Reconciled rather than written blind: `working` is a snapshot taken
-        // before the first request, and a sync can run for a minute. A feed
-        // removed or added during that window must survive the merge, so the
-        // current list is authoritative for which feeds exist and `working`
-        // only supplies the refreshed fields.
+        // Reconciled rather than written from `refreshed` alone. The list was
+        // read before the first request and a sync can run for a minute, so a
+        // feed removed or added during that window must survive: the list on
+        // disk is authoritative for which feeds EXIST, and `refreshed` only
+        // supplies the columns this sync actually computed.
         //
         // The re-read is INSIDE the lock, with the write it follows. Reading
         // after releasing it left a window: a remove could take the lock, delete
@@ -309,12 +308,11 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
         // list from a moment earlier -- would then publish the feed back. The
         // row returned from nowhere and stayed until the next load.
         //
-        // Re-reading at all (rather than publishing `working`) is still right:
-        // the write above reconciled against disk, so the UI must show THAT
-        // list, not the one this sync started from.
+        // Re-reading rather than publishing the accumulated map is still
+        // right: the write below reconciled against disk, so the UI has to
+        // show THAT list, not the one this sync started from.
         val snapshot = withContext(Dispatchers.IO) {
             writeLock.withLock {
-                val refreshed = working.associateBy { it.id }
                 val current = store.loadFeeds().map { stored ->
                     refreshed[stored.id]?.let { new ->
                         stored.copy(title = new.title, lastFetched = new.lastFetched)
@@ -352,7 +350,6 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** One feed: fetch, parse, merge. Free of UI concerns. */
     private companion object {
         /**
          * How many feeds may be fetching at once.
@@ -367,6 +364,7 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
         const val MAX_PARALLEL_FETCHES = 6
     }
 
+    /** One feed: fetch, parse, merge. Free of UI concerns. */
     private suspend fun refreshOne(feed: Feed, now: Long): Sync.Outcome {
         val fetched = withContext(Dispatchers.IO) { fetcher.get(feed.url) }
         if (fetched is FetchResult.Failed) {

@@ -23,7 +23,7 @@ fi
 # JUnit then reports a green suite for code that never built.
 rm -rf out
 
-kotlinc "$CORE"/{Model,Identity,Merge,DayBuckets,Discover,Fetch,Discoverer,YoutubeChannel,Sync,FeedParse,Dates,Json,Store,Opml,HttpFetcher}.kt \
+kotlinc "$CORE"/{Model,Identity,Merge,DayBuckets,Discover,Fetch,Discoverer,YoutubeChannel,Sync,FeedParse,Dates,Json,Store,Opml}.kt \
         "$TEST"/{MergeTest,DiscoverTest,SniffTest,SuffixRuleTest,DiscoverPlanTest,DiscovererTest,YoutubeChannelTest,SyncTest,FeedParseTest,DatesTest,StoreTest,JsonTest,OpmlTest}.kt \
         -classpath "$CP_JUNIT:$CP_CORO" \
         -d out

@@ -10,8 +10,8 @@ import java.nio.charset.StandardCharsets
  * `context.filesDir`.
  *
  * This is the only Android-specific code in the persistence path, which is why
- * it is a class and not an interface layer. Coarser than the CLI's DiskSpace in
- * one respect and finer in another:
+ * it is a class and not an interface layer. It diverges from the [FileSpace]
+ * default in one respect:
  *
  *  - Writes go through a temp file and an atomic rename. The interface's
  *    default is a plain write, and on a phone that default is wrong: Android
