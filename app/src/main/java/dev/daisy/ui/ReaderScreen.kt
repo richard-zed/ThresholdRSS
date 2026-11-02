@@ -111,7 +111,14 @@ fun ReaderScreen(
                     list.forEach { item ->
                         ItemRow(
                             item = item,
-                            feedTitle = "",
+                            // The feed is already produced above, so the row
+                            // can carry its title and favicon rather than
+                            // leaving the avatar blank for every entry here.
+                            feedTitle = feed?.title.orEmpty(),
+                            faviconUrl = feed?.faviconUrl,
+                            // Failures here would be redundant: this screen is
+                            // one feed, and the list above it already explains
+                            // a broken one.
                             failure = null,
                             onClick = { open = item },
                         )
