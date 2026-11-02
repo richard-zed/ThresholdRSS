@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.zIndex
 import androidx.compose.runtime.mutableFloatStateOf
 import kotlin.math.roundToInt
@@ -621,17 +620,25 @@ private fun FeedPickerScreen(
                             // controls stacking further in than the one that
                             // creates a layer, and the row stays underneath.
                             .zIndex(if (isDragging) 1f else 0f)
-                            // Translucent while held, so the insertion line on
-                            // the row underneath stays visible. graphicsLayer
-                            // rather than a background alpha: it fades the
-                            // whole row including its icon and text, and it is
-                            // a draw-time property, so it cannot cause the
-                            // layout to re-measure mid-drag.
-                            .graphicsLayer { alpha = if (isDragging) 0.75f else 1f }
-                            // Below the layer modifier, so animating placement
+                            // Alpha and translation in ONE layer.
+                            //
+                            // translationY, not Modifier.offset: offset is a
+                            // layout placement, so the item is still "at" its
+                            // original slot as far as the list is concerned and
+                            // the rows painted after it cover it whatever
+                            // zIndex says. Translating inside the layer moves
+                            // the pixels of the entry that was actually lifted.
+                            //
+                            // Alpha so the insertion line underneath shows
+                            // through: the held row was covering the marker it
+                            // was aiming at.
+                            .graphicsLayer {
+                                alpha = if (isDragging) 0.75f else 1f
+                                translationY = nudge
+                            }
+                            // Below the layer modifiers, so animating placement
                             // cannot reorder the stacking.
                             .animateItem()
-                            .offset { IntOffset(0, nudge.roundToInt()) }
                             // Keyed on index as well as id: the lambda closes
                             // over `index`, and after a reorder every row's
                             // index changes while its id does not. Keying on
