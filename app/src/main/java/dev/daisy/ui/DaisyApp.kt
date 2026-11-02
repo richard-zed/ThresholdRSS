@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -138,6 +139,7 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
                 screen = Screen.OneFeed(feedId)
             },
             onRemoveFeed = vm::removeFeed,
+            onExportOpml = { vm.exportOpml() },
         )
 
         else -> FeedListScreen(
@@ -155,7 +157,6 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
             },
             onShowFeeds = { screen = Screen.Feeds },
             onShowAdd = { screen = Screen.Add },
-            onExportOpml = { vm.exportOpml() },
             onMessageShown = vm::dismissMessage,
         )
     }
@@ -172,29 +173,11 @@ private fun FeedListScreen(
     onOpenFeed: (Long) -> Unit,
     onShowFeeds: () -> Unit,
     onShowAdd: () -> Unit,
-    onExportOpml: suspend () -> String,
     onMessageShown: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
-
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/x-opml"),
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val body = onExportOpml()
-            val ok = withContext(Dispatchers.IO) {
-                runCatching {
-                    context.contentResolver.openOutputStream(uri)?.use {
-                        it.write(body.encodeToByteArray())
-                    }
-                }.isSuccess
-            }
-            snackbar.showSnackbar(if (ok) "Exported" else "Could not write that file")
-        }
-    }
 
     // One-shot. Clearing the field is not optional: UiState.message has no
     // timer, so without the dismiss call this effect re-fires on every
@@ -267,23 +250,19 @@ private fun FeedListScreen(
                     .height(56.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (oneFeed != null) {
-                    // Back lives down here because the top bar is gone. It is
-                    // not another destination -- it is the exit from this one,
-                    // so it sits at the far left, away from the three tabs it
-                    // would otherwise be mistaken for.
-                    IconButton(
-                        onClick = onShowAll,
-                        modifier = Modifier.size(48.dp),
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "All entries",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
+                // Home replaces the back arrow that used to appear only on a
+                // filtered feed. Two buttons doing "return to everything" in
+                // two different ways depending on where you were was the
+                // janky part -- one destination, always present, always in the
+                // same place, reads better and is one fewer special case.
+                BarTab(
+                    label = "Home",
+                    selected = oneFeed == null && screen is Screen.All,
+                    onClick = onShowAll,
+                    modifier = Modifier.weight(1f),
+                ) { tint ->
+                    Icon(Icons.Filled.Home, contentDescription = null, tint = tint)
                 }
-
                 BarTab(
                     label = "Feeds",
                     selected = oneFeed != null,
@@ -299,14 +278,6 @@ private fun FeedListScreen(
                     modifier = Modifier.weight(1f),
                 ) { tint ->
                     Icon(Icons.Filled.Add, contentDescription = null, tint = tint)
-                }
-                BarTab(
-                    label = "Export",
-                    selected = false,
-                    onClick = { exportLauncher.launch("daisy-subscriptions.opml") },
-                    modifier = Modifier.weight(1f),
-                ) { tint ->
-                    Icon(Icons.Filled.Share, contentDescription = null, tint = tint)
                 }
 
                 if (state.syncing) {
@@ -342,19 +313,28 @@ private fun FeedListScreen(
                 // clock.
                 .statusBarsPadding(),
         ) {
+            // Every branch has to be a SCROLLABLE, including the empty ones.
+            // PullToRefreshBox does not run its own gesture detector -- it
+            // reads nested-scroll from its content, so a plain Box gives it
+            // nothing to listen to and the drag is swallowed. That is why
+            // refresh appeared dead on an empty list while working on a
+            // populated one. A LazyColumn with a single item weighs nothing
+            // and scrolls, so the gesture comes back.
             when {
                 state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     CircularProgressIndicator()
                 }
 
-                state.isEmpty -> EmptyState()
+                state.isEmpty -> FillingList { EmptyState() }
 
-                state.buckets.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text(
-                        "Nothing here yet. Pull down to refresh.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                state.buckets.isEmpty() -> FillingList {
+                    Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        Text(
+                            "Nothing here yet. Pull down to refresh.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
 
                 else -> LazyColumn(Modifier.fillMaxSize()) {
@@ -420,22 +400,47 @@ private fun FeedPickerScreen(
     onShowAll: () -> Unit,
     onOpenFeed: (Long) -> Unit,
     onRemoveFeed: (Long) -> Unit,
+    onExportOpml: suspend () -> String,
 ) {
     // No top bar, matching the entry list. These three screens are peers, so
     // they carry the same chrome -- a toolbar on two of them made switching
     // between them look like entering and leaving an app.
-    Scaffold { padding ->
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/x-opml"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val body = onExportOpml()
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use {
+                        it.write(body.encodeToByteArray())
+                    }
+                }.isSuccess
+            }
+            snackbar.showSnackbar(if (ok) "Exported" else "Could not write that file")
+        }
+    }
+
+    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
         // A Column so the back row can sit above the scroll container.
         // Inside the LazyColumn it would scroll away, and a back affordance
         // you have to scroll up to find is not one.
         Column(Modifier.padding(padding).fillMaxSize()) {
         BackRow(label = "All entries", onClick = onBack)
         if (state.feeds.isEmpty()) {
-            Box(Modifier.fillMaxSize(), Alignment.Center) {
+            Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
                 Text("No feeds yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            LazyColumn(Modifier.fillMaxSize()) {
+            // weight(1f), not fillMaxSize: the export footer sits below this
+            // in the same Column, and a child asking for the whole height
+            // leaves it nothing -- the button would be pushed off the bottom
+            // edge exactly when there are feeds to export.
+            LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                 items(state.feeds, key = { "feed-${it.id}" }) { feed ->
                     val dismissState = rememberSwipeToDismissBoxState(
                         // Destructive, so a swipe alone does not commit it: the
@@ -523,6 +528,23 @@ private fun FeedPickerScreen(
                 }
             }
         }
+            // Export lives here rather than in the bottom bar. It acts on the
+            // subscriptions as a whole, which is what this screen lists, and
+            // it is a one-off action -- a bare action next to three
+            // destinations is what made the bar read wrong.
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            TextButton(
+                onClick = { exportLauncher.launch("daisy-subscriptions.opml") },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+            ) {
+                Icon(
+                    Icons.Filled.Share,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Export subscriptions")
+            }
         }
     }
 }
@@ -952,6 +974,24 @@ private fun entryTime(item: Item): String {
         DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(stamp))
     } else {
         DateFormat.getDateInstance(DateFormat.SHORT).format(Date(stamp))
+    }
+}
+
+/**
+ * A one-item LazyColumn that fills the screen.
+ *
+ * Exists so an empty or loading screen still presents a scroll container to
+ * PullToRefreshBox, which reads the nested-scroll stream from its content
+ * rather than sensing the drag itself. Content that cannot scroll cannot
+ * overscroll, so without this the pull gesture is dropped on exactly the
+ * screens where a user is most likely to try it.
+ */
+@Composable
+private fun FillingList(content: @Composable () -> Unit) {
+    LazyColumn(Modifier.fillMaxSize()) {
+        item {
+            Box(Modifier.fillParentMaxSize()) { content() }
+        }
     }
 }
 
