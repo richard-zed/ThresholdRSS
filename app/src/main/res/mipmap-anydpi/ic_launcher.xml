@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Pre-adaptive fallback (API < 26), which has no mask and no safe zone, so
+    this is the mark at full bleed. Without it the launcher finds no icon at
+    all on older devices, because the only other definition lives in
+    mipmap-anydpi-v26.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+
+    <path android:pathData="M60,10 a50,50 0 1,0 0.01,0 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="60"
+                android:startY="110"
+                android:endX="60"
+                android:endY="10">
+                <item android:offset="0" android:color="#0D7945" />
+                <item android:offset="0.3763" android:color="#14B667" />
+                <item android:offset="1" android:color="#17ACAE" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="butt"
+        android:fillColor="#00000000"
+        android:pathData="M 30,35 A 55,55 0 0 1 85,90" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="butt"
+        android:fillColor="#00000000"
+        android:pathData="M 30,55 A 35,35 0 0 1 65,90" />
+    <path
+        android:fillColor="#E8E833"
+        android:pathData="M39,72 a9,9 0 1,0 0.01,0 z" />
+</vector>

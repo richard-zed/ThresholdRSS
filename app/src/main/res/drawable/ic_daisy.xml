@@ -1,62 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    The Daisy mark: a green->teal badge with two open white quarter-rings and
-    a yellow dot.
+    The Daisy mark, drawn to fill its viewport. This is the copy used inline
+    (favicon slot, error painter), where it sits beside real favicons and must
+    occupy the same box as one.
 
-    Authored on the adaptive-icon grid. A launcher masks the foreground to the
-    middle 72 of 108dp, so the art is scaled 0.6 (120 -> 72) and offset by 18
-    to sit centred in the safe zone rather than filling the canvas. At full bleed the rim,
-    which carries the whole silhouette, was being cut off.
-
-    The gradient is an aapt:attr inline value, not a flat fill. Vectors have no
-    gradient brush, but API 24+ (our minSdk) accepts one per-path this way.
+    The launcher uses ic_daisy_launcher instead, which scales the same art into
+    the adaptive-icon safe zone. Keeping the two apart is deliberate: one fills
+    its box, the other must not.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
+    android:viewportWidth="120"
+    android:viewportHeight="120">
 
-    <group
-        android:translateX="18"
-        android:translateY="18"
-        android:scaleX="0.6"
-        android:scaleY="0.6">
+    <!-- Badge: r=50 at (60,60). -->
+    <path android:pathData="M60,10 a50,50 0 1,0 0.01,0 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="60"
+                android:startY="110"
+                android:endX="60"
+                android:endY="10">
+                <item android:offset="0" android:color="#0D7945" />
+                <item android:offset="0.3763" android:color="#14B667" />
+                <item android:offset="1" android:color="#17ACAE" />
+            </gradient>
+        </aapt:attr>
+    </path>
 
-        <!-- Badge: r=50 at (60,60) on the original 120 grid. -->
-        <path android:pathData="M60,10 a50,50 0 1,0 0.01,0 z">
-            <aapt:attr name="android:fillColor">
-                <gradient
-                    android:type="linear"
-                    android:startX="60"
-                    android:startY="110"
-                    android:endX="60"
-                    android:endY="10">
-                    <item android:offset="0" android:color="#0D7945" />
-                    <item android:offset="0.3763" android:color="#14B667" />
-                    <item android:offset="1" android:color="#17ACAE" />
-                </gradient>
-            </aapt:attr>
-        </path>
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="butt"
+        android:fillColor="#00000000"
+        android:pathData="M 30,35 A 55,55 0 0 1 85,90" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="butt"
+        android:fillColor="#00000000"
+        android:pathData="M 30,55 A 35,35 0 0 1 65,90" />
 
-        <!-- White quarter rings, exactly as authored in daisy.svg. -->
-        <path
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="10"
-            android:strokeLineCap="butt"
-            android:fillColor="#00000000"
-            android:pathData="M 30,35 A 55,55 0 0 1 85,90" />
-        <path
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="10"
-            android:strokeLineCap="butt"
-            android:fillColor="#00000000"
-            android:pathData="M 30,55 A 35,35 0 0 1 65,90" />
-
-        <!-- The yellow dot. -->
-        <path
-            android:fillColor="#E8E833"
-            android:pathData="M39,72 a9,9 0 1,0 0.01,0 z" />
-    </group>
+    <path
+        android:fillColor="#E8E833"
+        android:pathData="M39,72 a9,9 0 1,0 0.01,0 z" />
 </vector>
