@@ -11,6 +11,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import dev.daisy.ui.DaisyApp
+import dev.daisy.ui.theme.DaisyTypography
 import dev.daisy.ui.theme.FallbackDark
 import dev.daisy.ui.theme.FallbackLight
 
@@ -42,5 +43,9 @@ fun DaisyTheme(
         darkTheme -> FallbackDark
         else -> FallbackLight
     }
-    MaterialTheme(colorScheme = colorScheme, content = content)
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = DaisyTypography,
+        content = content,
+    )
 }
