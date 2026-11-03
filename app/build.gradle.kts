@@ -1,16 +1,42 @@
 // No Kotlin plugin: AGP 9 compiles Kotlin itself. The Compose compiler plugin
 // is separate machinery and is still required.
+import java.util.Properties
+
+// Release signing. Credentials live in keystore.properties at the repo root,
+// which is gitignored -- the keystore itself must never enter git. When the
+// file is absent the release build falls back to the debug key so a fresh
+// clone still builds; `./gradlew :app:assembleRelease` on a machine without
+// the properties file therefore produces a TEST-ONLY apk.
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { load(it) }
+    }
+}
+val hasReleaseKey = keystoreProps.getProperty("storeFile") != null
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
-    namespace = "dev.daisy"
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
+    namespace = "rip.failed.daisy"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "dev.daisy"
+        applicationId = "rip.failed.daisy"
         minSdk = 24
         targetSdk = 37
         versionCode = 1
@@ -19,22 +45,20 @@ android {
 
     buildTypes {
         release {
-            // Signing release with the DEBUG key, for local testing only. The
-            // debug keystore's password is literally "android", so anyone can
-            // sign a build that updates this one -- delete this line and point
-            // at a real keystore before shipping.
+            // Release signing comes from keystore.properties (gitignored) when
+            // it exists; otherwise this falls back to AGP's generated debug
+            // key so a fresh clone still builds. The fallback password is
+            // literally "android", so a build made without the properties
+            // file is TEST-ONLY and must not be distributed.
             //
-            // Reusing AGP's generated debug config rather than re-declaring a
-            // signingConfigs block: AGP generates ~/.android/debug.keystore on
-            // first debug build, and a hand-written path would fail at signing
-            // on a machine that has not built debug yet -- turning "unsigned
-            // APK" into a confusing build error. This way the keystore exists
-            // by construction.
+            // Reusing AGP's generated debug config rather than re-declaring
+            // one: AGP generates ~/.android/debug.keystore on first debug
+            // build, so the fallback works by construction on any machine.
             //
-            // Why not a real keystore now: a different signature forces an
-            // uninstall to switch, which wipes feeds.json and every downloaded
-            // article. This keeps the install upgradeable in place.
-            signingConfig = signingConfigs.getByName("debug")
+            // Switching from the debug key to a real one changes the
+            // signature, which forces one uninstall -- that wipes feeds.json
+            // and every downloaded article. Do it once, deliberately.
+            signingConfig = if (hasReleaseKey) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
             // R8 full mode is AGP's default. `proguard-android-optimize.txt`
             // turns on the optimisation passes as well as shrinking -- the
             // plain `proguard-android.txt` variant only strips dead code.

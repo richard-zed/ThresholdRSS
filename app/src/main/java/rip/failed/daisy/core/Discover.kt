@@ -1,0 +1,367 @@
+package rip.failed.daisy.core
+
+/**
+ * What happened when the user pasted a URL and we went looking for a feed.
+ *
+ * Deliberately NOT a pair of booleans. The indicator needs to tell apart "still
+ * working" from "found it" from "gave up", and a `Boolean isLoading` collapses
+ * the first into the third whenever something else is also loading -- the exact
+ * shape of the Kai scroll bug, where a flag that stays true for a whole
+ * operation got read as "it just started".
+ *
+ * [Attempt] is carried so a failure can say what was tried. "No feed found" is
+ * unactionable; "tried /feed -> 404, /rss -> HTML" is a bug report.
+ */
+sealed interface DiscoverState {
+
+    /** Nothing has been tried. The idle indicator state. */
+    data object Idle : DiscoverState
+
+    /** A fetch is in flight. The spinner state. */
+    data class Looking(val current: String? = null) : DiscoverState
+
+    /** A feed URL was found and verified to parse. The green state. */
+    data class Found(val feedUrl: String, val title: String?) : DiscoverState
+
+    /**
+     * Every candidate failed. The red state.
+     *
+     * [tried] is never empty by the time this is reachable -- an empty list here
+     * would mean we gave up without asking anything, which is a bug in the
+     * caller, not a result.
+     */
+    data class NotFound(val tried: List<Attempt>) : DiscoverState
+}
+
+/** One URL we fetched, and how it went. */
+data class Attempt(
+    val url: String,
+    val outcome: Outcome,
+    /** Short human-readable detail, e.g. "404" or "not a feed". */
+    val detail: String? = null,
+) {
+    enum class Outcome { FEED, NOT_A_FEED, HTTP_ERROR, NETWORK_ERROR, SKIPPED }
+}
+
+/** Reasons a candidate could not even be tried. */
+sealed interface DiscoverError {
+    data object MalformedUrl : DiscoverError
+    /** Nothing to try: the URL is neither a feed, a known pattern, nor a site. */
+    data object NothingToTry : DiscoverError
+}
+
+/**
+ * Builds the ordered list of URLs worth fetching for [input].
+ *
+ * Pure: no network, no clock, no coroutines. That is what lets the ordering
+ * rules -- the part that is easy to get subtly wrong -- be tested directly.
+ *
+ * Order is by COST. A rule that costs zero extra requests goes ahead of one
+ * that costs a fetch, regardless of how confident we are:
+ *
+ *   1. the URL exactly as given (the user may already know the feed URL)
+ *   2. known-suffix rules: Mastodon, Lemmy, GitHub, Tumblr, Medium -- append
+ *      `.rss` / `.atom`, no extra request
+ *   3. known-pattern rules: YouTube -- needs one HTML fetch to resolve a handle
+ *   4. generic discovery: the site's own <link rel=alternate>, HTTP Link header,
+ *      then conventional paths
+ *
+ * The exact input comes first even though it will usually fail, because "try
+ * what they typed" is one request and is the only path that works for feeds
+ * behind a path no rule would guess.
+ */
+object UrlCandidates {
+
+    /** Conventional feed paths, cheapest/most common first. */
+    private val CONVENTIONAL_PATHS = listOf(
+        "/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/index.xml",
+        "/feeds/posts/default", "/?feed=rss2",
+    )
+
+    /**
+     * Returns candidates in the order they should be tried.
+     *
+     * Duplicates are removed keeping the FIRST occurrence, so a URL that both
+     * matches a rule and appears in the conventional list is not fetched twice.
+     */
+    fun forInput(input: String, siteHandlesDiscovery: Boolean = true): List<Candidate> {
+        // A fediverse handle is rewritten to its profile url BEFORE the url
+        // check, because a handle is not a url and the check would reject it.
+        // `@someone@mastodon.social` has no scheme and its "host" would parse
+        // as the literal string `@someone@mastodon.social`, which fails the
+        // dotted-TLD test -- so every handle returned an empty candidate list
+        // and the walk never ran. See [profileUrlForHandle].
+        val handle = profileUrlForHandle(input)
+        val trimmed = (handle ?: input).trim()
+        if (trimmed.isEmpty() || !looksLikeUrl(trimmed)) return emptyList()
+
+        val out = ArrayList<Candidate>()
+        val seen = HashSet<String>()
+
+        fun add(url: String, kind: Candidate.Kind) {
+            if (seen.add(url)) out.add(Candidate(url, kind))
+        }
+
+        // The as-given url is normally unconditional: it is the cheapest way
+        // to answer when the user pasted a feed link. The one exception is a
+        // youtube url whose own path already carries the channel id -- that
+        // page is HTML, never a feed, and the pattern rule below already knows
+        // the feed url, so fetching it can only waste a request.
+        val target = withScheme(trimmed)
+        val idAlreadyKnown = isYoutube(target) && YoutubeChannel.idFromChannelPath(target) != null
+        if (!idAlreadyKnown) add(target, Candidate.Kind.AS_GIVEN)
+
+        // Zero-cost suffix rules: the site exposes a feed at <url>.rss or
+        // equivalent. No discovery request is needed, so these beat everything.
+        for (suffix in suffixRules(target)) add(suffix, Candidate.Kind.SUFFIX_RULE)
+
+        // One request to resolve, then the answer is a url.
+        youtubeCandidates(target).forEach { add(it, Candidate.Kind.PATTERN_RULE) }
+
+        // YouTube is EXCLUDED from path guessing: its channel page is the
+        // discovery fetch (candidates above already include it), and
+        // youtube.com/feed, /rss, /feed.xml and the rest are 404s. Guessing
+        // eight paths there is eight wasted requests and eight budget charges,
+        // which can starve the page fetch that would have answered.
+        if (siteHandlesDiscovery && !isYoutube(target)) {
+            // No separate discovery-page candidate: the as-given url is already
+            // that fetch. If it returns HTML we hold the body, so reading
+            // <link rel=alternate> off it costs nothing extra.
+            val base = origin(target)
+            if (base != null) {
+                for (p in CONVENTIONAL_PATHS) add(base + p, Candidate.Kind.CONVENTIONAL_PATH)
+            }
+        }
+
+        return out
+    }
+
+    /**
+     * Feed URLs derivable from the input by appending a known suffix. Every
+     * one of these costs exactly one request, the same as the as-given attempt,
+     * which is why they all sit in the zero-cost tier.
+     *
+     * DELIBERATELY NO `youtu.be`-style host rewriting here: a suffix rule must
+     * produce a url on the SAME origin, or it is a pattern rule in disguise and
+     * belongs in its own tier with its own cost.
+     */
+    private fun suffixRules(url: String): List<String> {
+        val noTrailing = url.trimEnd('/')
+        return when {
+            // Reddit: both spellings are real endpoints. NOTE: Reddit ends RSS
+            // support on 2026-11-13, after which these 404 -- harmless, one
+            // cheap request, and the fallback path picks up whatever replaces
+            // it. Kept because the cost of being wrong is one request.
+            noTrailing.contains("reddit.com/r/") && !noTrailing.contains(".rss") ->
+                listOf("$noTrailing/.rss", "$noTrailing.rss")
+
+            // GitHub: user activity and repo feeds are Atom, not RSS.
+            // github.com/<user>.atom, and a repo page adds releases/commits.
+            hostOf(noTrailing) == "github.com" && !noTrailing.endsWith(".atom") ->
+                when (pathSegments(noTrailing)) {
+                    1 -> listOf("$noTrailing.atom")
+                    2 -> listOf("$noTrailing/releases.atom", "$noTrailing/commits.atom")
+                    else -> emptyList()
+                }
+
+            // Medium: medium.com/feed/@user, and <user>.medium.com/feed.
+            hostOf(noTrailing)?.endsWith("medium.com") == true && !noTrailing.endsWith("/feed") ->
+                listOf("$noTrailing/feed")
+
+            // Tumblr: /<blog>/rss.
+            hostOf(noTrailing)?.endsWith("tumblr.com") == true && !noTrailing.endsWith("/rss") ->
+                listOf("$noTrailing/rss")
+
+            // Hacker News front page. User profiles need an id lookup, so they
+            // are not a suffix rule.
+            noTrailing == "news.ycombinator.com" || noTrailing == "https://news.ycombinator.com" ->
+                listOf("https://news.ycombinator.com/rss")
+
+            // Mastodon and friends: /@user.rss. This is a SHAPE rule, not a host
+            // rule -- fediverse instances do not share a domain, so there is no
+            // host to match on. It therefore goes LAST, after every rule that
+            // knows its own host: a Medium profile is also /@name, and this
+            // branch used to claim it and produce medium.com/@someone.rss.
+            //
+            // Being last means a host with a more specific rule wins, and only
+            // an @-shaped path nobody claimed falls through to here. The cost of
+            // being wrong is one request.
+            // `/@user` is the canonical profile path; `/users/user` is the
+            // older path some instances still serve, and Mastodon redirects
+            // one to the other for pages but NOT always for .rss. Both are
+            // tried, .rss first, since that is the one every instance that
+            // offers a feed at all will answer.
+            noTrailing.contains("/@") && !noTrailing.endsWith(".rss") -> {
+                val rss = "$noTrailing.rss"
+                val alt = federatedRss(noTrailing)
+                if (alt == null) listOf(rss) else listOf(rss, alt)
+            }
+
+            else -> emptyList()
+        }
+    }
+
+    /**
+     * `/@user` -> `/users/user`, so the older Mastodon profile path can be
+     * tried as well. Handles on other networks use `@` too, so this must only
+     * fire when the path has exactly the two segments an @-profile has --
+     * otherwise `/@a/@b.rss` style nonsense gets generated.
+     *
+     * Returns null when the path is not that shape, and the caller then keeps
+     * its single guess. Null is not an error, it is "no second opinion here".
+     */
+    private fun federatedRss(url: String): String? {
+        val afterHost = url.substringAfter("://").substringAfter('/', "")
+        val segs = afterHost.split('/').filter { it.isNotEmpty() }
+        if (segs.size != 1 || !segs[0].startsWith("@")) return null
+        val base = url.substringBeforeLast('/')
+        val user = segs[0].substring(1)
+        if (user.isEmpty()) return null
+        return "$base/users/$user.rss"
+    }
+
+    /**
+     * YouTube: every form reduces to a channel id, then one canonical feed url.
+     *
+     * /channel/UC... carries the id directly, so it is answered here with no
+     * extra request. /@handle, /c/name and /user/name do not, and the page has
+     * to be fetched to find it -- see [YoutubeChannel]. Those are returned as
+     * the PAGE url, because the page is the thing to fetch; [Discoverer] turns
+     * the body into a feed url when it comes back.
+     *
+     * A direct id is emitted as the feed and the page is not needed, so the
+     * direct case costs exactly the same one request as the handle case.
+     */
+    private fun youtubeCandidates(url: String): List<String> {
+        if (!isYoutube(url)) return emptyList()
+        YoutubeChannel.idFromChannelPath(url)?.let {
+            return listOf(YoutubeChannel.feedUrl(it))
+        }
+        return if (YoutubeChannel.needsResolution(url)) listOf(url) else emptyList()
+    }
+
+    /** Extracts `UC...` from a /channel/ path, or null. */
+    fun channelIdInPath(url: String): String? = YoutubeChannel.idFromChannelPath(url)
+
+    /**
+     * A bare host is a url, not a typo.
+     *
+     * `phoronix.net` is what a user pastes, and requiring the scheme here made
+     * `forInput` return an EMPTY plan -- so discovery reported NotFound(tried=[])
+     * without a single request, while the same host with https:// worked. The
+     * scheme is supplied downstream by `origin()`/`resolve()`, which already
+     * default to https when it is missing.
+     *
+     * Anything containing a slash before the first dot, or whitespace, is still
+     * rejected: that is a path fragment or a sentence, not a host.
+     */
+    /**
+     * `@user@host` or `@user` -> the instance's profile page, or null if the
+     * input is not a handle.
+     *
+     * Only the TWO-part form can be resolved. A bare `@user` names no instance,
+     * so there is nothing to fetch and it is left alone -- returning a guess
+     * would send the request to example.com.
+     *
+     * The leading `@` is optional because people paste `user@host` as often as
+     * `@user@host`, and both mean the same person. A url that already carries
+     * a scheme is never a handle, so `https://mastodon.social/@someone` passes
+     * through untouched.
+     */
+    fun profileUrlForHandle(input: String): String? {
+        val s = input.trim()
+        if (s.isEmpty() || s.contains("://") || s.any { it.isWhitespace() }) return null
+        // Strip the leading `@` so `@user@host` and `user@host` take one path.
+        val body = if (s.startsWith("@")) s.substring(1) else s
+        // An `@` at position 0 of the remainder would be an empty local part.
+        if (body.isEmpty() || body.startsWith("@")) return null
+        val at = body.indexOf('@')
+        if (at <= 0 || at == body.length - 1) return null
+
+        val user = body.substring(0, at)
+        val host = body.substring(at + 1)
+        // The local part is one path segment: anything with a slash or a second
+        // @ is not a handle, it is a malformed url.
+        if (user.contains('/') || host.contains('/') || host.contains('@')) return null
+        // Reuse the url host test so `user@foo` is rejected the same way `foo`
+        // is, rather than becoming https://foo/@user.
+        if (!looksLikeUrl(host)) return null
+
+        return "https://$host/@$user"
+    }
+
+    private fun looksLikeUrl(s: String): Boolean {
+        if (s.startsWith("http://") || s.startsWith("https://")) return true
+        if (s.any { it.isWhitespace() }) return false
+        val host = s.substringBefore('/')
+        if (host.isEmpty()) return false
+        // Require a dotted host with a plausible TLD, so "foo" is not a url.
+        val dot = host.lastIndexOf('.')
+        if (dot < 1 || dot == host.length - 1) return false
+        return host.substring(dot + 1).all { it.isLetter() } && host.substring(dot + 1).length >= 2
+    }
+
+    /** The input with an explicit scheme, for use as a fetch target. */
+    private fun withScheme(s: String): String =
+        if (s.startsWith("http://") || s.startsWith("https://")) s else "https://$s"
+
+    /** `https://a.b/c` -> `https://a.b`. Null if not parseable. */
+    fun origin(url: String): String? {
+        val host = hostOf(url) ?: return null
+        val scheme = url.substringBefore("://", "https")
+        return "$scheme://$host"
+    }
+
+    /**
+     * Lowercased host without port, or null.
+     *
+     * youtu.be is folded to youtube.com so short links classify as YouTube,
+     * but note that [origin] rebuilds from THIS value -- which is why origin
+     * is only used for conventional-path guessing, never for identity.
+     */
+    /**
+     * Number of non-empty path segments, ignoring query, fragment and a
+     * trailing slash. `example.com` -> 0, `example.com/a` -> 1,
+     * `example.com/a/b/` -> 2.
+     *
+     * Separate from [hostOf] because hostOf returns a bare host -- counting
+     * slashes in it always yields zero, which silently picks the wrong branch.
+     */
+    fun pathSegments(url: String): Int {
+        val path = url.substringAfter("://", "").substringAfter('/', "").substringBefore('?').substringBefore('#')
+        return path.split('/').count { it.isNotEmpty() }
+    }
+
+    fun hostOf(url: String): String? {
+        val afterScheme = url.substringAfter("://", "")
+        if (afterScheme.isEmpty()) return null
+        val host = afterScheme.substringBefore('/').substringBefore('?').substringBefore('#')
+        val bare = host.substringBefore(':').lowercase()
+        if (bare.isEmpty()) return null
+        return if (bare == "youtu.be") "youtube.com" else bare
+    }
+
+    /** True if this URL should be treated as a YouTube channel. */
+    fun isYoutube(url: String): Boolean {
+        val h = hostOf(url) ?: return false
+        return h == "youtube.com" || h.endsWith(".youtube.com")
+    }
+}
+
+/** A URL to try, and why it is on the list. */
+data class Candidate(val url: String, val kind: Kind) {
+    enum class Kind {
+        /** Exactly what the user pasted. */
+        AS_GIVEN,
+        /** Derived by appending a known suffix. No extra request beyond the fetch. */
+        SUFFIX_RULE,
+        /** Derived from a known site pattern. */
+        PATTERN_RULE,
+        /** A guessed conventional path. */
+        CONVENTIONAL_PATH,
+        /** Declared by the page itself via <link rel=alternate> or Link:. */
+        ADVERTISED,
+        /** A url that resolved this feed on a previous attempt. Tried first. */
+        REMEMBERED,
+    }
+}

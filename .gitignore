@@ -12,3 +12,9 @@ local.properties
 # committed -- it is regenerated per build and goes stale immediately.
 app/build/
 *.hprof
+
+# Release signing credentials. The keystore itself lives outside the repo;
+# this file holds only the path to it plus the passwords.
+keystore.properties
+*.jks
+*.keystore
