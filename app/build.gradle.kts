@@ -1,6 +1,7 @@
 // No Kotlin plugin: AGP 9 compiles Kotlin itself. The Compose compiler plugin
 // is separate machinery and is still required.
 import java.util.Properties
+import org.gradle.api.GradleException
 
 // Release signing. Credentials live in keystore.properties at the repo root,
 // which is gitignored -- the keystore itself must never enter git. When the
@@ -45,20 +46,25 @@ android {
 
     buildTypes {
         release {
-            // Release signing comes from keystore.properties (gitignored) when
-            // it exists; otherwise this falls back to AGP's generated debug
-            // key so a fresh clone still builds. The fallback password is
-            // literally "android", so a build made without the properties
-            // file is TEST-ONLY and must not be distributed.
-            //
-            // Reusing AGP's generated debug config rather than re-declaring
-            // one: AGP generates ~/.android/debug.keystore on first debug
-            // build, so the fallback works by construction on any machine.
+            // Release signing comes from keystore.properties (gitignored).
             //
             // Switching from the debug key to a real one changes the
             // signature, which forces one uninstall -- that wipes feeds.json
             // and every downloaded article. Do it once, deliberately.
-            signingConfig = if (hasReleaseKey) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            //
+            // Fail loudly rather than silently signing with the debug key.
+            // The fallback used to apply here too, which meant a release apk
+            // built without keystore.properties looked fine and carried a
+            // certificate anyone can forge (password "android"). A build that
+            // stops is cheaper than a build that ships the wrong signature.
+            if (!hasReleaseKey) {
+                throw GradleException(
+                    "Release signing needs keystore.properties at the repo root " +
+                        "(storeFile, storePassword, keyAlias, keyPassword). " +
+                        "Use :app:assembleDebug for a debug build instead."
+                )
+            }
+            signingConfig = signingConfigs.getByName("release")
             // R8 full mode is AGP's default. `proguard-android-optimize.txt`
             // turns on the optimisation passes as well as shrinking -- the
             // plain `proguard-android.txt` variant only strips dead code.

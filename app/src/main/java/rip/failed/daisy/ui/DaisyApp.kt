@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -314,10 +313,9 @@ private fun FeedListScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                // The top bar is gone, so nothing else reserves the status
-                // bar. Without this the first date rule slides under the
-                // clock.
-                .statusBarsPadding(),
+                // No statusBarsPadding here. Scaffold's innerPadding already
+                // carries the status-bar inset even with no top bar, so adding
+                // it again doubled the gap above the first date rule.
         ) {
             // Every branch has to be a SCROLLABLE, including the empty ones.
             // PullToRefreshBox does not run its own gesture detector -- it

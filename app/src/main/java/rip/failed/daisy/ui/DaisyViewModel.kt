@@ -763,6 +763,11 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
                 },
             )
         }
+        // Imported feeds arrive with no items, so without this the list stays
+        // empty until something else triggers a sync and the import reads as
+        // having failed. sync() is not suspend and reads the feed list from
+        // disk under the lock, so it cannot race the subscribe writes above.
+        if (added > 0) sync()
     }
 
     /** One feed's items. Reads from disk; one canonical copy beats a cache. */

@@ -221,11 +221,19 @@ class Discoverer(
         val head = body.take(4096)
         val m = Regex("""<title[^>]*>(.*?)</title>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
             .find(head) ?: return null
-        val raw = m.groupValues[1]
-        return raw.trim()
-            .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-            .replace("&quot;", "\"").replace("&#39;", "'")
-            .takeIf { it.isNotEmpty() }
+        // CDATA is common in the wild -- YCombinator ships
+        // <title><![CDATA[Hacker News]]></title> -- and a plain capture leaves
+        // the wrapper in the string, so "Found feed" showed
+        // <![CDATA[Hacker News]]>. This regex is a shortcut over raw XML and
+        // does not share FeedParse's tokenizer, so it has to strip the marker
+        // itself. Only the outer section is unwrapped: CDATA cannot nest, and
+        // any "]]>" inside would have ended it.
+        // Trim first: the wrapper sits flush against the content, so any
+        // leading newline or space from a pretty-printed feed would stop
+        // removePrefix matching and leave the marker in place.
+        val raw = m.groupValues[1].trim()
+            .removePrefix("<![CDATA[").removeSuffix("]]>")
+        return Html.decodeEntities(raw).trim().takeIf { it.isNotEmpty() }
     }
 
     companion object {
