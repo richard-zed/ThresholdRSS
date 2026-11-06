@@ -9,10 +9,11 @@ A simple RSS and Atom reader for Android.
 
 ## Features
 
-- RSS 2.0 and Atom, including `media:group` enclosures and OPML import and export
-- Per-feed and combined feeds
-- Dark and light themes
-- No account, no sync, no telemetry
+- RSS 2.0 and Atom.
+- OPML import and export.
+- View the combined feed or an individual feed.
+- Material You themed.
+- No account, no sync, no telemetry.
 
 ## Build
 
