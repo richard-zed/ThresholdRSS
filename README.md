@@ -1,25 +1,19 @@
-# ThresholdRSS
+
+
+<h1 align="center"><img src="daisy.svg" height="32"> ThresholdRSS</h1>
 
 An RSS and Atom reader for Android. Feeds, articles, and read state stay on
 the device.
 
-![Main screen](docs/screenshots/main.png)
+| <img src="docs/screenshots/main.png"> | <img src="docs/screenshots/feeds.png"> | <img src="docs/screenshots/article.png"> |
+| ---------------------------------------------- | -------------------------------------------- | ------------------------------------------- |
 
 ## Features
 
-- RSS 2.0 and Atom, including `media:group` enclosures and OPML import
-- Per-feed and combined article lists
-- Offline article storage with read/unread tracking
+- RSS 2.0 and Atom, including `media:group` enclosures and OPML import and export
+- Per-feed and combined feeds
 - Dark and light themes
 - No account, no sync, no telemetry
-
-## Install
-
-Download the APK from the [releases page](../../releases) and sideload it.
-Android 7.0 (API 24) or newer.
-
-The release APK is signed; verify it against the certificate fingerprint
-listed in the release notes.
 
 ## Build
 
@@ -34,5 +28,3 @@ The APK is written to `app/build/outputs/apk/release/`.
 ## License
 
 GPL-3.0. See [LICENSE](LICENSE).
-
-The icon source is [daisy.svg](daisy.svg).
