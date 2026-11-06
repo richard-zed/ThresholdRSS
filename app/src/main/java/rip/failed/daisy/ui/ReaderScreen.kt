@@ -6,12 +6,18 @@ import android.net.Uri
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +34,11 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.painterResource
+import coil3.compose.AsyncImage
+import rip.failed.daisy.R
 import androidx.compose.ui.viewinterop.AndroidView
+import rip.failed.daisy.core.Feed
 import rip.failed.daisy.core.Item
 import rip.failed.daisy.core.Readability
 import java.text.DateFormat
@@ -54,11 +64,14 @@ import kotlinx.coroutines.withContext
 internal fun ArticleScreen(
     item: Item,
     onBack: () -> Unit,
-    // The busier call site (DaisyApp) has to keep reading other state, so the
-    // article is composed in two places. Both need the destination bar, and
-    // neither can build the other's: it lives private to DaisyApp. A slot
-    // keeps the bar in one implementation and lets each caller say which
-    // destination is lit.
+    // The feed this article came from, for the name and icon in the header.
+    // Nullable because the item can outlive its feed: removing a feed leaves
+    // its stored items until the next cleanup, and the reader must still draw
+    // something for them rather than crash or leave a hole.
+    feed: Feed? = null,
+    // The destination bar lives private to DaisyApp, so it cannot be built
+    // here. A slot lets the caller supply it and say which destination is
+    // lit, without this screen knowing anything about navigation.
     bar: @Composable () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -81,13 +94,58 @@ internal fun ArticleScreen(
     Scaffold(bottomBar = bar) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
 
-            item.published?.let {
-                Text(
-                    text = DateFormat.getDateTimeInstance().format(Date(it)),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                )
+            // Date left, feed identity right. The Row always renders so the
+            // feed name does not vanish on an item with no date -- only the
+            // date text is conditional.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                item.published?.let {
+                    Text(
+                        text = DateFormat.getDateTimeInstance().format(Date(it)),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                // let(), not a null check: `feed` is a parameter captured by
+                // this lambda, so the compiler will not smart-cast it.
+                feed?.takeIf { it.title.isNotEmpty() }?.let { f ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        // Bounded so a long feed name cannot push the date
+                        // off the left edge: maxLines clips height, not
+                        // width, so the limit has to be here.
+                        modifier = Modifier.fillMaxWidth(0.5f),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        Text(
+                            text = f.title,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        // Same reasoning as ItemRow: error catches a favicon
+                        // that 404s, fallback catches a null model, so the
+                        // slot is never blank.
+                        AsyncImage(
+                            model = f.faviconUrl,
+                            contentDescription = null,
+                            error = painterResource(R.drawable.ic_daisy),
+                            fallback = painterResource(R.drawable.ic_daisy),
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(CircleShape),
+                        )
+                    }
+                }
             }
 
             // The extracted body wins when it is long enough to be the article.

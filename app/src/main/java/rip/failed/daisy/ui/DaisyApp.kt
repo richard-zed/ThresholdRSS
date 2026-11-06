@@ -168,6 +168,9 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
         entry != null -> ArticleScreen(
             item = entry,
             onBack = { openEntry = null },
+            // Resolved here because ArticleScreen only has the Item, and the
+            // title and favicon live on the Feed. Same lookup ItemRow does.
+            feed = state.feeds.firstOrNull { it.id == entry.feedId },
             // Home: the merged list is where this was opened from, and it is
             // the destination this article belongs to.
             bar = {
