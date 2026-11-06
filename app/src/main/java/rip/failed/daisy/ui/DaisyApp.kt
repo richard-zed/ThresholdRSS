@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
@@ -128,6 +129,14 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     var screen by remember { mutableStateOf<Screen>(Screen.All) }
     var openEntry by remember { mutableStateOf<Item?>(null) }
+    // Hoisted above the `when` so it outlives the list. Opening an article
+    // swaps FeedListScreen out of the tree rather than covering it, so a
+    // rememberLazyListState() owned by that composable is discarded and the
+    // feed rebuilds at position 0 on back. Owned here, it stays in
+    // composition throughout and the scroll position is still there to
+    // restore. rememberLazyListState is itself saveable, so rotation and
+    // process death restore it too.
+    val feedListState = rememberLazyListState()
 
     // Every screen above All pops to All. Attempting to leave the app from a
     // sub-screen instead would close it, which is not what a top bar's back
@@ -212,6 +221,7 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
         else -> FeedListScreen(
             state = state,
             screen = screen,
+            listState = feedListState,
             onSync = vm::sync,
             onShowAll = {
                 vm.selectFeed(null)
@@ -234,6 +244,7 @@ fun DaisyApp(vm: DaisyViewModel = viewModel()) {
 private fun FeedListScreen(
     state: UiState,
     screen: Screen,
+    listState: LazyListState,
     onSync: () -> Unit,
     onShowAll: () -> Unit,
     onOpenEntry: (Item) -> Unit,
@@ -341,7 +352,7 @@ private fun FeedListScreen(
                     }
                 }
 
-                else -> LazyColumn(Modifier.fillMaxSize()) {
+                else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     // FLAT list: a header row then its entries, appended into
                     // one stream. The previous version emitted a DayHeader and
                     // then called items() INSIDE an itemsIndexed() block.
