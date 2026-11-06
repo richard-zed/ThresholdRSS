@@ -1,6 +1,8 @@
 lib/
 out/
+# Ignore local jars (lib/) but never the Gradle wrapper jar -- CI needs it.
 *.jar
+!gradle/wrapper/gradle-wrapper.jar
 
 # Gradle
 .gradle/
