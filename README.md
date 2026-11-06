@@ -2,8 +2,7 @@
 
 <h1 align="center"><img src="daisy.svg" height="32"> ThresholdRSS</h1>
 
-An RSS and Atom reader for Android. Feeds, articles, and read state stay on
-the device.
+A simple RSS and Atom reader for Android.
 
 | <img src="docs/screenshots/main.png"> | <img src="docs/screenshots/feeds.png"> | <img src="docs/screenshots/article.png"> |
 | ---------------------------------------------- | -------------------------------------------- | ------------------------------------------- |
