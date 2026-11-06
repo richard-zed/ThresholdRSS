@@ -241,7 +241,7 @@ class DiscovererTest {
 
         assertTrue(result is DiscoverState.Found)
         assertEquals(feed, (result as DiscoverState.Found).feedUrl)
-        assertEquals(listOf(page, feed), f.requested, "actual requests: ${f.requested}")
+        assertEquals("actual requests: ${f.requested}", listOf(page, feed), f.requested)
     }
 
     @Test
@@ -259,7 +259,7 @@ class DiscovererTest {
         val (result, _) = run(f, page)
 
         assertTrue(result is DiscoverState.Found)
-        assertEquals(feed, (result as DiscoverState.Found).feedUrl, "actual requests: ${f.requested}")
+        assertEquals("actual requests: ${f.requested}", feed, (result as DiscoverState.Found).feedUrl)
     }
 
     @Test
