@@ -96,9 +96,15 @@ class DiscoverTest {
     }
 
     @Test
-    fun `a mastodon profile gets one rss suffix`() {
+    fun `a mastodon profile gets both rss spellings`() {
+        // Two candidates, both live and both cheap. /@user.rss is what every
+        // instance that offers a feed answers; /users/user.rss covers the older
+        // profile path some instances still serve. See federatedRss.
         assertEquals(
-            listOf("https://mastodon.social/@someone.rss"),
+            listOf(
+                "https://mastodon.social/@someone.rss",
+                "https://mastodon.social/users/someone.rss",
+            ),
             UrlCandidates.forInput("https://mastodon.social/@someone")
                 .filter { it.kind == Candidate.Kind.SUFFIX_RULE }
                 .map { it.url },

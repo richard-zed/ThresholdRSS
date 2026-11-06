@@ -55,7 +55,10 @@ class SuffixRuleTest {
         // The other half of the same rule: nothing claims mastodon.social, so
         // the shape branch must still fire for it.
         assertEquals(
-            listOf("https://mastodon.social/@someone.rss"),
+            listOf(
+                "https://mastodon.social/@someone.rss",
+                "https://mastodon.social/users/someone.rss",
+            ),
             suffixUrls("https://mastodon.social/@someone"),
         )
     }
@@ -120,7 +123,10 @@ class SuffixRuleTest {
     @Test
     fun `a mastodon profile maps to rss`() {
         assertEquals(
-            listOf("https://mastodon.social/@someone.rss"),
+            listOf(
+                "https://mastodon.social/@someone.rss",
+                "https://mastodon.social/users/someone.rss",
+            ),
             suffixUrls("https://mastodon.social/@someone"),
         )
     }
