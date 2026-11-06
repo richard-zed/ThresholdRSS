@@ -185,16 +185,19 @@ class Discoverer(
                     if (UrlCandidates.isYoutube(candidate.url)) {
                         val id = YoutubeChannel.idFromChannelPath(result.finalUrl)
                             ?: YoutubeChannel.idFromPage(result.body)
-                        if (id != null) plan.promote(listOf(YoutubeChannel.feedUrl(id)))
-                    }
-
-                    // Not a feed. A YouTube page that named no channel id is a
-                    // dead end, not a candidate to keep walking past: the next
-                    // candidate is the url the user typed, and subscribing to
-                    // that is how `youtube.com/users/@name` became an empty
-                    // feed. Stop here and report it.
-                    if (UrlCandidates.isYoutube(candidate.url)) {
-                        return finish(DiscoverState.NotFound(plan.attempts), onState)
+                        if (id != null) {
+                            plan.promote(listOf(YoutubeChannel.feedUrl(id)))
+                        } else {
+                            // A YouTube page that named no channel id is a dead
+                            // end, not a candidate to keep walking past: the
+                            // next candidate is the url the user typed, and
+                            // subscribing to that is how
+                            // `youtube.com/users/@name` became an empty feed.
+                            // Only fires when nothing was promoted -- returning
+                            // here unconditionally skipped the feed we had just
+                            // queued.
+                            return finish(DiscoverState.NotFound(plan.attempts), onState)
+                        }
                     }
 
                     // If it is HTML it may still name the feed. Only the body is
