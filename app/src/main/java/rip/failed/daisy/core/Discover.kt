@@ -191,7 +191,12 @@ object UrlCandidates {
             // one to the other for pages but NOT always for .rss. Both are
             // tried, .rss first, since that is the one every instance that
             // offers a feed at all will answer.
-            noTrailing.contains("/@") && !noTrailing.endsWith(".rss") -> {
+            // YouTube is excluded: its /@handle pages are channel pages
+            // handled by youtubeCandidates, and /@handle.rss is a 404 there.
+            // Without this the shape rule claimed every youtube handle and
+            // cost an extra discovered-404 request before the real fetch.
+            noTrailing.contains("/@") && !noTrailing.endsWith(".rss") &&
+                !isYoutube(noTrailing) -> {
                 val rss = "$noTrailing.rss"
                 val alt = federatedRss(noTrailing)
                 if (alt == null) listOf(rss) else listOf(rss, alt)
