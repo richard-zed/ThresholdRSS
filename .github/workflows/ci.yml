@@ -25,6 +25,12 @@ jobs:
       - name: Build and test
         run: ./gradlew :app:assembleDebug :app:testDebugUnitTest --stacktrace
 
+      # The console reporter drops assertion messages; the XML keeps them.
+      - name: Show test failures
+        if: failure()
+        run: |
+          grep -rh -A3 '<failure' app/build/test-results/testDebugUnitTest/*.xml || true
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
