@@ -241,7 +241,7 @@ class DiscovererTest {
 
         assertTrue(result is DiscoverState.Found)
         assertEquals(feed, (result as DiscoverState.Found).feedUrl)
-        assertEquals(listOf(page, feed), f.requested)
+        assertEquals("DIAG requested=", listOf(page, feed), f.requested)
     }
 
     @Test
