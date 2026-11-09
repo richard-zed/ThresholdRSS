@@ -8,7 +8,7 @@ coroutines = "1.11.0"
 composeBom = "2024.09.03"
 activityCompose = "1.9.2"
 lifecycle = "2.8.6"
-coreKtx = "1.13.1"
+coreKtx = "1.19.1"
 coil = "3.5.0"
 
 [libraries]
