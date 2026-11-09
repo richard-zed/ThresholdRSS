@@ -291,6 +291,28 @@ private fun FeedListScreen(
     // Fix: only retract on a true -> false EDGE of state.syncing. Tracking the
     // previous value means a recomposition with syncing still false is not an
     // edge and does nothing.
+    // Startup: true from first composition until the launch sync ends.
+    //
+    // Arming from `state.syncing` alone does NOT work. The ViewModel's init
+    // launches load() and sync() as coroutines, so when this composable first
+    // runs, `syncing` is still false -- the startup fetch has been requested
+    // but has not started. Reading it here would leave the flag false for
+    // exactly the case this exists to show.
+    //
+    // `loading` is the usable signal: it is true until the disk read lands,
+    // which is also when the feed list is known. So the indicator is held up
+    // while loading, then passed to the sync. It retracts on the syncing
+    // falling edge below, and on an empty feed list the sync never sets
+    // `syncing`, so this clears itself the moment loading ends.
+    var startupSync by remember { mutableStateOf(true) }
+    LaunchedEffect(state.loading, state.feeds.isEmpty(), state.syncing) {
+        startupSync = when {
+            state.loading -> true
+            state.feeds.isEmpty() -> false
+            else -> state.syncing
+        }
+    }
+
     var pullRefreshing by remember { mutableStateOf(false) }
     var wasSyncing by remember { mutableStateOf(state.syncing) }
     LaunchedEffect(state.syncing) {
@@ -312,7 +334,7 @@ private fun FeedListScreen(
         },
     ) { padding ->
         PullToRefreshBox(
-            isRefreshing = pullRefreshing,
+            isRefreshing = pullRefreshing || startupSync,
             onRefresh = {
                 pullRefreshing = true
                 // A sync with no feeds returns immediately without touching
