@@ -1,0 +1,26 @@
+# GitHub-native dependency updates. No app install, no bot account, no token:
+# Dependabot runs on GitHub's own infrastructure with its own credentials.
+#
+# Everything resolves through the version catalog, so a bump is a one-line
+# diff against gradle/libs.versions.toml.
+version: 2
+updates:
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 4
+    groups:
+      # AGP, Kotlin and the Compose compiler are a matched set. Bumping one
+      # alone fails at plugin resolution, not at a test, so they travel
+      # together in one PR.
+      toolchain:
+        patterns:
+          - "com.android.application"
+          - "com.android.tools.build*"
+          - "org.jetbrains.kotlin*"
+      # Members of the Compose BOM are versioned BY the BOM. Updating one
+      # individually overrides it, so they are grouped with it.
+      compose:
+        patterns:
+          - "androidx.compose*"
