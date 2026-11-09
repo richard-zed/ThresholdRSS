@@ -1,0 +1,54 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    "group:monorepos",
+    "schedule:weekly"
+  ],
+  "timezone": "America/Los_Angeles",
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "description": "AGP, Kotlin and the Compose compiler are a matched set. One PR, and never merged automatically -- a mismatch between them surfaces as a plugin-resolution failure, not a red test.",
+      "groupName": "build toolchain (AGP + Kotlin + Compose compiler)",
+      "matchPackageNames": [
+        "com.android.application",
+        "com.android.tools.build:gradle",
+        "org.jetbrains.kotlin.plugin.compose",
+        "org.jetbrains.kotlin:kotlin-gradle-plugin"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Compose BOM pins its members; updating a member individually overrides it and defeats the point.",
+      "groupName": "Compose BOM",
+      "matchPackageNames": [
+        "androidx.compose:compose-bom",
+        "androidx.compose.ui:ui",
+        "androidx.compose.ui:ui-graphics",
+        "androidx.compose.foundation:foundation",
+        "androidx.compose.material3:material3",
+        "androidx.compose.material:material-icons-core"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Gradle wrapper updates change the build environment. Worth one deliberate PR.",
+      "matchManagers": ["gradle-wrapper"],
+      "groupName": "Gradle wrapper",
+      "automerge": false
+    },
+    {
+      "description": "Test-only dependencies cannot break the shipped APK.",
+      "matchDepTypes": ["testImplementation", "androidTestImplementation"],
+      "groupName": "test dependencies",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    }
+  ],
+  "minimumReleaseAge": "3 days",
+  "prConcurrentLimit": 4,
+  "rebaseWhen": "conflicted"
+}
