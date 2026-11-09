@@ -36,4 +36,3 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-versions = { id = "com.github.ben-manes.versions", version = "0.51.0" }
