@@ -114,6 +114,21 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         load()
+        // Fetch on launch, once per app instance.
+        //
+        // Here rather than in a LaunchedEffect in DaisyApp: the ViewModel
+        // survives a configuration change, a composable effect does not. An
+        // effect keyed on Unit would re-sync on every rotation.
+        //
+        // Deliberately not silent. sync() sets `syncing`, so the pull-to-
+        // refresh indicator shows while the startup fetch runs -- the user
+        // asked for that, and it also means a startup sync that hangs is
+        // visible rather than looking like a dead app.
+        //
+        // sync() re-reads the feed list from disk under the write lock, so
+        // this is safe against load() still being in flight; the list it
+        // fetches from comes from disk, not from the state load() publishes.
+        sync(quietIfEmpty = true)
     }
 
     /**
@@ -159,7 +174,7 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
      * The filter is read here rather than passed in so every caller -- pull,
      * tab, gesture -- inherits the same rule without remembering it.
      */
-    fun sync() {
+    fun sync(quietIfEmpty: Boolean = false) {
         if (_state.value.syncing) return
         val filter = _state.value.feedFilterId
 
@@ -180,7 +195,16 @@ class DaisyViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             if (feeds.isEmpty()) {
-                _state.update { it.copy(message = "No feeds yet", syncing = false) }
+                // quietIfEmpty: the startup sync passes this so a fresh
+                // install does not greet the user with a "No feeds yet"
+                // snackbar on every launch. A user-initiated refresh still
+                // gets told why nothing happened.
+                _state.update {
+                    it.copy(
+                        message = if (quietIfEmpty) null else "No feeds yet",
+                        syncing = false,
+                    )
+                }
                 return@launch
             }
             try {
