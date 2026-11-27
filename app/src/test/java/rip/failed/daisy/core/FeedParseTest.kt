@@ -424,8 +424,8 @@ class FeedParseTest {
     fun `a media thumbnail beats a body image`() {
         val body = rss(
             "<item><title>A</title><guid>1</guid>" +
-                "<media:thumbnail xmlns:media=&quot;http://search.yahoo.com/mrss/&quot; " +
-                "url=&quot;https://example.com/declared.jpg&quot;/>" +
+                "<media:thumbnail xmlns:media=\"http://search.yahoo.com/mrss/\" " +
+                "url=\"https://example.com/declared.jpg\"/>" +
                 "<description>&lt;img src=&quot;https://example.com/body.jpg&quot;&gt;</description>" +
                 "</item>",
         )

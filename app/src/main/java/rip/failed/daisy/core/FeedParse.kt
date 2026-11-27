@@ -254,19 +254,37 @@ object FeedParser {
     private fun imgUrl(attrs: Map<String, String>, baseUrl: String): String? {
         if (isTooSmall(attrs)) return null
 
-        val raw = attrs["src"] ?: attrs["data-src"] ?: attrs["data-original"]
-            ?: firstFromSrcset(attrs["srcset"] ?: attrs["data-srcset"])
-            ?: return null
+        // Try each source in turn: a lazy-loading theme leaves src holding a
+        // placeholder and puts the real URL in data-src, so the first usable
+        // candidate wins rather than the first present one.
+        val candidates = sequence {
+            yield(attrs["src"])
+            yield(attrs["data-src"])
+            yield(attrs["data-original"])
+            yield(firstFromSrcset(attrs["srcset"] ?: attrs["data-srcset"]))
+        }
+        for (raw in candidates) {
+            if (raw.isNullOrBlank()) continue
+            // data: URIs are inline pixels and base64 blobs -- never a lead
+            // image, and some are megabytes of payload we would then hand to
+            // the image loader.
+            if (raw.startsWith("data:", ignoreCase = true)) continue
+            // A relative path resolves against the FEED's url, not the
+            // article's. Wrong in principle but the only base available here.
+            val resolved = UrlResolve.resolve(baseUrl, raw)
+            if (resolved.isNotBlank() && !isPlaceholder(resolved)) return resolved
+        }
+        return null
+    }
 
-        // data: URIs are inline pixels and base64 blobs -- never a lead image,
-        // and some are megabytes of payload in a string we would then hand to
-        // the image loader.
-        if (raw.startsWith("data:", ignoreCase = true)) return null
-        // A relative path resolves against the FEED's url, not the article's.
-        // That is wrong in principle but the only base available here; the
-        // alternative is resolving at render time, which would need the item's
-        // link to survive a store round-trip.
-        return UrlResolve.resolve(baseUrl, raw).takeIf { it.isNotBlank() }
+    /**
+     * Well-known spacer and tracking-pixel filenames, which carry no declared
+     * dimensions and so slip past [isTooSmall]. Kept short on purpose: an
+     * unmatched name costs a broken row, a false positive costs a real picture.
+     */
+    private fun isPlaceholder(url: String): Boolean {
+        val name = url.substringAfterLast('/').substringBefore('?').lowercase()
+        return name in setOf("blank.gif", "spacer.gif", "pixel.gif", "1x1.gif", "transparent.gif")
     }
 
     /** The first URL in a srcset list, which is comma-separated and descriptor-suffixed. */
