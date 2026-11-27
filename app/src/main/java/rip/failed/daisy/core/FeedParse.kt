@@ -29,6 +29,16 @@ object FeedParser {
         data class Error(val reason: String) : Result
     }
 
+    /**
+     * Shortest declared side, in pixels, that still counts as a lead image.
+     *
+     * 100 is below any real article thumbnail and above every spacer (1px),
+     * site icon (16-64px), avatar (32-96px) and inline tracking pixel. Feeds
+     * declare dimensions only sometimes, so this rejects the obvious ones
+     * rather than gating on the tag.
+     */
+    private const val MIN_IMAGE_PX = 100
+
     /** Element-local name, namespace prefix stripped. */
     private fun local(name: String): String = name.substringAfterLast(':')
 
@@ -128,12 +138,16 @@ object FeedParser {
             child("description")?.text() ?: child("encoded")?.text()
         }
 
+        // Summary is computed before the image because the image falls back
+        // into it: most feeds carry their lead picture as an <img> inside the
+        // description, not as a media: element, so the body IS the only place
+        // the picture exists.
         return IncomingItem(
             guid = identity,
             title = title,
             link = link,
             summary = summary?.takeIf { it.isNotBlank() },
-            imageUrl = imageFor(el, atom),
+            imageUrl = imageFor(el, atom) ?: imageInHtml(summary, baseUrl),
             published = published,
         )
     }
@@ -193,6 +207,90 @@ object FeedParser {
         val type = c.attrs["type"]?.lowercase()
         if (type != null && type.isNotEmpty() && !type.startsWith("image/")) return null
         return url
+    }
+
+    /**
+     * The lead image inside the item's own HTML body, or null.
+     *
+     * This is where most feeds actually put their picture. media:thumbnail is a
+     * YouTube/WordPress habit; a normal blog writes <img> into <description> and
+     * an Atom entry does the same in <content>. Those tags are literal text
+     * after entity decoding, so [imageFor] -- which only walks the XML tree --
+     * could never see them, and rows for every such feed came back blank.
+     *
+     * "Good image" is judged from the markup alone, because this runs at parse
+     * time with no network: a declared width or height under [MIN_IMAGE_PX] is
+     * a spacer, a site icon or an avatar, never a lead picture. Attributes are
+     * checked across src, data-src and srcset, since lazy-loading themes leave
+     * src holding a placeholder and put the real URL somewhere else.
+     *
+     * Unverifiable size is NOT a rejection. Most <img> tags declare nothing, and
+     * dropping every undeclared image would take away more pictures than it
+     * saves -- the row already degrades to text if the URL 404s.
+     */
+    private fun imageInHtml(html: String?, baseUrl: String): String? {
+        if (html.isNullOrBlank()) return null
+        // Fail fast: the overwhelming majority of descriptions hold no markup.
+        if (html.indexOf("<img", ignoreCase = true) < 0) return null
+
+        for (node in Html.parse(html)) {
+            findImg(node, baseUrl)?.let { return it }
+        }
+        return null
+    }
+
+    /** Depth-first walk for the first <img> worth using. */
+    private fun findImg(n: Html.Node, baseUrl: String): String? {
+        if (n.name.equals("img", ignoreCase = true)) {
+            imgUrl(n.attrs, baseUrl)?.let { return it }
+        }
+        for (c in n.children) {
+            findImg(c, baseUrl)?.let { return it }
+        }
+        return null
+    }
+
+    /** One <img>, or null if it is too small or its source is unusable. */
+    private fun imgUrl(attrs: Map<String, String>, baseUrl: String): String? {
+        if (isTooSmall(attrs)) return null
+
+        val raw = attrs["src"] ?: attrs["data-src"] ?: attrs["data-original"]
+            ?: firstFromSrcset(attrs["srcset"] ?: attrs["data-srcset"])
+            ?: return null
+
+        // data: URIs are inline pixels and base64 blobs -- never a lead image,
+        // and some are megabytes of payload in a string we would then hand to
+        // the image loader.
+        if (raw.startsWith("data:", ignoreCase = true)) return null
+        // A relative path resolves against the FEED's url, not the article's.
+        // That is wrong in principle but the only base available here; the
+        // alternative is resolving at render time, which would need the item's
+        // link to survive a store round-trip.
+        return UrlResolve.resolve(baseUrl, raw).takeIf { it.isNotBlank() }
+    }
+
+    /** The first URL in a srcset list, which is comma-separated and descriptor-suffixed. */
+    private fun firstFromSrcset(srcset: String?): String? {
+        if (srcset.isNullOrBlank()) return null
+        return srcset.substringBefore(',').trim().substringBefore(' ').trim()
+            .takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * True when the markup declares a dimension small enough to disqualify it.
+     *
+     * Either axis is enough: a 1x1 tracking pixel and a 728x90 banner are both
+     * disqualified by the short side. Unparseable values are ignored rather
+     * than rejected -- "width=100%" and "width=auto" are common and say nothing
+     * about pixels.
+     */
+    private fun isTooSmall(attrs: Map<String, String>): Boolean {
+        for (key in arrayOf("width", "height")) {
+            val v = attrs[key]?.trim() ?: continue
+            val px = v.removeSuffix("px").trim().toIntOrNull() ?: continue
+            if (px < MIN_IMAGE_PX) return true
+        }
+        return false
     }
 
     private fun dateFor(el: El, atom: Boolean): Long? {

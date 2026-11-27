@@ -344,4 +344,91 @@ class FeedParseTest {
         )
         assertEquals("https://example.com/direct.jpg", items(body).single().imageUrl)
     }
+
+    // The common case: no media: element at all, picture lives in the body.
+    @Test
+    fun `an image in the description supplies an image`() {
+        val body = rss(
+            "<item><title>A</title><guid>1</guid><description>" +
+                "&lt;p&gt;&lt;img src="https://example.com/b.png"&gt;&lt;/p&gt;" +
+                "</description></item>",
+        )
+        assertEquals("https://example.com/b.png", items(body).single().imageUrl)
+    }
+
+    @Test
+    fun `a small declared image is skipped for a larger one after it`() {
+        val body = rss(
+            "<item><title>A</title><guid>1</guid><description>" +
+                "&lt;img src="https://example.com/icon.png" width="32" height="32"&gt;" +
+                "&lt;img src="https://example.com/big.jpg" width="800"&gt;" +
+                "</description></item>",
+        )
+        assertEquals("https://example.com/big.jpg", items(body).single().imageUrl)
+    }
+
+    @Test
+    fun `a one pixel spacer is never the lead image`() {
+        val body = rss(
+            "<item><title>A</title><guid>1</guid><description>" +
+                "&lt;img src="https://example.com/px.gif" width="1" height="1">" +
+                "</description></item>",
+        )
+        assertNull(items(body).single().imageUrl)
+    }
+
+    @Test
+    fun `an undeclared size is still accepted`() {
+        val body = rss(
+            "<item><title>A</title><guid>1</guid><description>" +
+                "&lt;img src="https://example.com/x.jpg"&gt;" +
+                "</description></item>",
+        )
+        assertEquals("https://example.com/x.jpg", items(body).single().imageUrl)
+    }
+
+    @Test
+    fun `a data uri is never the lead image`() {
+        val body = rss(
+            "<item><title>A</title><guid>1</guid><description>" +
+                "&lt;img src="data:image/gif;base64,R0lGOD"&gt;" +
+                "</description></item>",
+        )
+        assertNull(items(body).single().imageUrl)
+    }
+
+    @Test
+    fun `a lazy loaded image falls back to data-src`() {
+        val body = rss(
+            "<item><title>A</title><guid>1</guid><description>" +
+                "&lt;img src="https://example.com/blank.gif" " +
+                "data-src="https://example.com/real.jpg"&gt;" +
+                "</description></item>",
+        )
+        assertEquals("https://example.com/real.jpg", items(body).single().imageUrl)
+    }
+
+    @Test
+    fun `a relative body image resolves against the feed url`() {
+        val body = rss(
+            "<item><title>A</title><guid>1</guid><description>" +
+                "&lt;img src="/img/lead.jpg"&gt;" +
+                "</description></item>",
+        )
+        assertEquals("https://example.com/img/lead.jpg", items(body).single().imageUrl)
+    }
+
+    // A media: element is a deliberate declaration of the lead image; body
+    // markup is a guess. The explicit one has to win.
+    @Test
+    fun `a media thumbnail beats a body image`() {
+        val body = rss(
+            "<item><title>A</title><guid>1</guid>" +
+                "<media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" " +
+                "url="https://example.com/declared.jpg"/>" +
+                "<description>&lt;img src="https://example.com/body.jpg"&gt;</description>" +
+                "</item>",
+        )
+        assertEquals("https://example.com/declared.jpg", items(body).single().imageUrl)
+    }
 }
