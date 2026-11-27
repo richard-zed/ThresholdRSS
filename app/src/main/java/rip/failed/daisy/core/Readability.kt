@@ -136,7 +136,28 @@ object Readability {
 
         // A node boosted by its own class or id, not by its contents. This is
         // what picks `<div class="post-content">` over the div wrapping it.
-        val best = scores.entries.maxByOrNull { (n, s) -> s * hintBoost(n) }?.key ?: return null
+        var best = scores.entries.maxByOrNull { (n, s) -> s * hintBoost(n) }?.key ?: return null
+
+        // Descend to the tightest container holding the prose.
+        //
+        // The scorer credits whatever element directly owns a text run, and an
+        // outer wrapper owns every run its descendants do not. That makes the
+        // topmost div out-score the article inside it: measured on Phoronix
+        // (paragraphs split by <br/>, so no <p> tags at all) #content scored
+        // 38.6 against article.full at 22.7, and the reader showed the nav, the
+        // ad script and the Related News rail as article body.
+        //
+        // Follow the largest child while it still holds half the parent's text.
+        // Downward only, so sibling rails can never be pulled in, and the floor
+        // stops the walk before it reaches a single paragraph.
+        while (true) {
+            val here = best.innerText().length
+            if (here == 0) break
+            val down = best.children.maxByOrNull { it.innerText().length } ?: break
+            val size = down.innerText().length
+            if (size * 2 < here || size < MIN_USEFUL_CHARS) break
+            best = down
+        }
 
         val title = documentTitle(roots) ?: headingIn(best)
         val byline = bylineIn(best)
